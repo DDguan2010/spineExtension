@@ -4,6 +4,7 @@
 
 - 🟢为**Gandi**编辑器量身定做的Spine运行时扩展
 - ☑️类型安全，功能可扩展
+- 在 Gandi 中加载并控制 Spine 骨骼动画，支持本地/云端资源加载、动画播放、骨骼控制、IK、换装与附件切换。
 
 ### ✨亮点
 
@@ -31,9 +32,9 @@
 #### 🗯️扩展功能
 
 - [x] 加载骨架文件
-- [ ] 文件上传
-    - [ ] 允许用户使用data url替换骨架文件
-    - [ ] 直接通过api上传文件
+- [x] 文件上传
+    - [x] 允许用户使用data url替换骨架文件
+    - [x] 直接通过api上传文件
 - [x] 显示骨架skin
 - [x] 根据drawable状态调整骨架**坐标**变换
 - [x] 根据drawable状态调整骨家**缩放**变换
@@ -41,7 +42,10 @@
 - [x] relative pos
 - [x] 从skin中获取骨架数据
 - [x] 修改、读取骨骼数据
+- [x] IK target 控制
+- [x] skin / slot / attachment 操作
 - [x] 应用动画
+- [x] 动画混合、暂停、继续、停止 track
 
 #### 💬扩展信息
 
@@ -69,6 +73,6 @@
   为了更加便于编辑的功能~~炫技~~，我通过设置getter setter的方式patch了blockly，并实现了很多有趣的功能，
   具体可见[customBlocks](src/util/customBlocks)。
 
-[rate]: https://img.shields.io/badge/dynamic/json?url=https://bfs-web.ccw.site/extensions/spineAnimation&query=$.body.stats.averageRating&label=%E2%AD%90%EF%B8%8F%E6%89%A9%E5%B1%95%E8%AF%84%E5%88%86
+[rate]: https://img.shields.io/badge/dynamic/json?url=https://bfs-web.ccw.site/extensions/spinePro&query=$.body.stats.averageRating&label=%E2%AD%90%EF%B8%8F%E6%89%A9%E5%B1%95%E8%AF%84%E5%88%86
 [1]: https://www.ccw.site/student/68dd004586bbc77f84e309ac
 [2]: https://m.ccw.site/user_projects_assets/dc5394d2-c5c5-4d69-b924-effaae5c4543.png
