@@ -257,6 +257,17 @@ class SpineExtension extends SimpleExt {
                 },
             },
             {
+                opcode: this.createDataURLSpineConfig.name,
+                text: translate('createDataURLSpineConfig.text'),
+                blockType: BlockType.REPORTER,
+                arguments: {
+                    VERSION: {
+                        type: ArgumentType.STRING,
+                        menu: 'VERSION',
+                    },
+                },
+            },
+            {
                 opcode: this.loadSkeleton.name,
                 text: translate('loadSkeleton.text'),
                 blockType: BlockType.REPORTER,
@@ -330,6 +341,90 @@ class SpineExtension extends SimpleExt {
                 },
             },
             {
+                opcode: this.pointBoneTo.name,
+                blockType: BlockType.COMMAND,
+                text: translate('pointBoneTo.text'),
+                tooltip: translate('pointBoneTo.tip'),
+                arguments: {
+                    BONE: {
+                        type: null,
+                    },
+                    POS: {
+                        type: ArgumentType.STRING,
+                        defaultValue: '0, 0',
+                    },
+                    OFFSET: {
+                        type: ArgumentType.NUMBER,
+                        defaultValue: 0,
+                    },
+                },
+            },
+            {
+                opcode: this.setIkTargetPos.name,
+                blockType: BlockType.COMMAND,
+                text: translate('setIkTargetPos.text'),
+                tooltip: translate('setIkTargetPos.tip'),
+                arguments: {
+                    SKELETON: {
+                        type: null,
+                    },
+                    NAME: {
+                        type: ArgumentType.STRING,
+                        defaultValue: 'ik',
+                    },
+                    POS: {
+                        type: ArgumentType.STRING,
+                        defaultValue: '0, 0',
+                    },
+                },
+            },
+            {
+                opcode: this.setSkeletonSkin.name,
+                blockType: BlockType.COMMAND,
+                text: translate('setSkeletonSkin.text'),
+                arguments: {
+                    SKELETON: {
+                        type: null,
+                    },
+                    NAME: {
+                        type: ArgumentType.STRING,
+                        defaultValue: 'default',
+                    },
+                },
+            },
+            {
+                opcode: this.setSlotAttachment.name,
+                blockType: BlockType.COMMAND,
+                text: translate('setSlotAttachment.text'),
+                arguments: {
+                    SKELETON: {
+                        type: null,
+                    },
+                    SLOT: {
+                        type: ArgumentType.STRING,
+                        defaultValue: 'slot',
+                    },
+                    ATTACHMENT: {
+                        type: ArgumentType.STRING,
+                        defaultValue: 'attachment',
+                    },
+                },
+            },
+            {
+                opcode: this.hideSlotAttachment.name,
+                blockType: BlockType.COMMAND,
+                text: translate('hideSlotAttachment.text'),
+                arguments: {
+                    SKELETON: {
+                        type: null,
+                    },
+                    SLOT: {
+                        type: ArgumentType.STRING,
+                        defaultValue: 'slot',
+                    },
+                },
+            },
+            {
                 blockType: BlockType.LABEL,
                 text: translate('animation'),
             },
@@ -357,6 +452,10 @@ class SpineExtension extends SimpleExt {
                         type: ArgumentType.STRING,
                         menu: 'BOOLEAN',
                     },
+                    DELAY: {
+                        type: ArgumentType.NUMBER,
+                        defaultValue: 0,
+                    },
                 },
             },
             {
@@ -377,6 +476,100 @@ class SpineExtension extends SimpleExt {
                     MIX: {
                         type: ArgumentType.NUMBER,
                         defaultValue: 0,
+                    },
+                },
+                blockType: BlockType.COMMAND,
+            },
+            {
+                opcode: this.setDefaultMix.name,
+                text: translate('setDefaultMix.text'),
+                arguments: {
+                    STATE: {
+                        type: null,
+                    },
+                    MIX: {
+                        type: ArgumentType.NUMBER,
+                        defaultValue: 0.2,
+                    },
+                },
+                blockType: BlockType.COMMAND,
+            },
+            {
+                opcode: this.setAnimationMix.name,
+                text: translate('setAnimationMix.text'),
+                arguments: {
+                    STATE: {
+                        type: null,
+                    },
+                    FROM: {
+                        type: ArgumentType.STRING,
+                        defaultValue: 'idle',
+                    },
+                    TO: {
+                        type: ArgumentType.STRING,
+                        defaultValue: 'walk',
+                    },
+                    MIX: {
+                        type: ArgumentType.NUMBER,
+                        defaultValue: 0.2,
+                    },
+                },
+                blockType: BlockType.COMMAND,
+            },
+            {
+                opcode: this.setAnimationTimeScale.name,
+                text: translate('setAnimationTimeScale.text'),
+                arguments: {
+                    STATE: {
+                        type: null,
+                    },
+                    SCALE: {
+                        type: ArgumentType.NUMBER,
+                        defaultValue: 1,
+                    },
+                },
+                blockType: BlockType.COMMAND,
+            },
+            {
+                opcode: this.pauseAnimationState.name,
+                text: translate('pauseAnimationState.text'),
+                arguments: {
+                    STATE: {
+                        type: null,
+                    },
+                },
+                blockType: BlockType.COMMAND,
+            },
+            {
+                opcode: this.resumeAnimationState.name,
+                text: translate('resumeAnimationState.text'),
+                arguments: {
+                    STATE: {
+                        type: null,
+                    },
+                },
+                blockType: BlockType.COMMAND,
+            },
+            {
+                opcode: this.clearAnimationTrack.name,
+                text: translate('clearAnimationTrack.text'),
+                arguments: {
+                    STATE: {
+                        type: null,
+                    },
+                    TRACK: {
+                        type: ArgumentType.NUMBER,
+                        defaultValue: 0,
+                    },
+                },
+                blockType: BlockType.COMMAND,
+            },
+            {
+                opcode: this.clearAnimationTracks.name,
+                text: translate('clearAnimationTracks.text'),
+                arguments: {
+                    STATE: {
+                        type: null,
                     },
                 },
                 blockType: BlockType.COMMAND,
@@ -478,6 +671,46 @@ class SpineExtension extends SimpleExt {
         );
     }
 
+    async createDataURLSpineConfig(args: { VERSION: VersionNames }) {
+        const files = await this.selectFiles();
+        if (!files || files.length === 0) {
+            return '';
+        }
+
+        const validation = this.validateSpineFiles(files);
+        if (!validation.valid) {
+            alert(validation.error);
+            return '';
+        }
+
+        const atlasValidation = await this.validateAtlasImages(
+            files,
+            validation.atlasFile!,
+        );
+        if (!atlasValidation.valid) {
+            alert(
+                translate('upload.missingAtlasImages', {
+                    files: atlasValidation.missing.join('\n'),
+                }),
+            );
+            return '';
+        }
+
+        const rawDataURIs: Record<string, string> = {};
+        for (const file of files) {
+            rawDataURIs[file.name] = await this.readFileAsDataURL(file);
+        }
+
+        return JSON.stringify(
+            new SpineConfig({
+                skel: validation.skelFile!.name,
+                atlas: validation.atlasFile!.name,
+                version: args.VERSION,
+                rawDataURIs,
+            }),
+        );
+    }
+
     /**
      * by AI: Trae
      *
@@ -495,9 +728,15 @@ class SpineExtension extends SimpleExt {
         atlasFile?: File;
         error?: string;
     } {
-        const skelFile = files.find((f) => f.name.endsWith('.skel'));
-        const jsonFile = files.find((f) => f.name.endsWith('.json'));
-        const atlasFile = files.find((f) => f.name.endsWith('.atlas'));
+        const skelFile = files.find((f) =>
+            f.name.toLowerCase().endsWith('.skel'),
+        );
+        const jsonFile = files.find((f) =>
+            f.name.toLowerCase().endsWith('.json'),
+        );
+        const atlasFile = files.find((f) =>
+            f.name.toLowerCase().endsWith('.atlas'),
+        );
 
         const skeletonFile = skelFile || jsonFile;
 
@@ -529,6 +768,27 @@ class SpineExtension extends SimpleExt {
         };
     }
 
+    private async validateAtlasImages(files: File[], atlasFile: File) {
+        const atlasText = await atlasFile.text();
+        const pngFiles = new Set(
+            files
+                .filter((file) => file.name.toLowerCase().endsWith('.png'))
+                .map((file) => file.name),
+        );
+        const pages = atlasText
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(
+                (line) =>
+                    line &&
+                    line.toLowerCase().endsWith('.png') &&
+                    !line.includes(':') &&
+                    !line.includes(','),
+            );
+        const missing = pages.filter((page) => !pngFiles.has(page));
+        return { valid: missing.length === 0, missing };
+    }
+
     /**
      * by AI: Trae
      *
@@ -538,10 +798,16 @@ class SpineExtension extends SimpleExt {
      * 显示所有可用版本列表，验证用户输入
      * @returns 有效的版本名称，如果用户取消或输入无效则返回 null
      */
-    private selectVersion(): VersionNames | null {
+    private selectVersion(detectedVersion?: VersionNames): VersionNames | null {
         const versions = Object.keys(spineVersions);
         const version = prompt(
-            translate('upload.selectVersion') + '\n' + versions.join('\n'),
+            translate('upload.selectVersion') +
+                (detectedVersion
+                    ? '\n' + translate('upload.detectedVersion', { version: detectedVersion })
+                    : '') +
+                '\n' +
+                versions.join('\n'),
+            detectedVersion || '',
         );
 
         if (!version || !(version in spineVersions)) {
@@ -549,6 +815,31 @@ class SpineExtension extends SimpleExt {
         }
 
         return version as VersionNames;
+    }
+
+    private async detectRuntimeVersion(file: File): Promise<VersionNames | null> {
+        if (!file.name.toLowerCase().endsWith('.json')) {
+            return null;
+        }
+        try {
+            const json = JSON.parse(await file.text());
+            const version = String(json?.skeleton?.spine || '');
+            if (version.startsWith('3.8')) return '3.8webgl';
+            if (version.startsWith('4.0')) return '4.0webgl';
+            if (version.startsWith('4.2')) return '4.2webgl';
+        } catch (e) {
+            logger.warn('detect spine version failed', e);
+        }
+        return null;
+    }
+
+    private readFileAsDataURL(file: File): Promise<string> {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result));
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(file);
+        });
     }
 
     /**
@@ -614,6 +905,19 @@ class SpineExtension extends SimpleExt {
                 return;
             }
 
+            const atlasValidation = await this.validateAtlasImages(
+                files,
+                validation.atlasFile!,
+            );
+            if (!atlasValidation.valid) {
+                alert(
+                    translate('upload.missingAtlasImages', {
+                        files: atlasValidation.missing.join('\n'),
+                    }),
+                );
+                return;
+            }
+
             const fileList = files.map((f) => f.name).join('\n');
             const confirmMsg = translate('upload.confirmUpload', {
                 files: fileList,
@@ -624,7 +928,10 @@ class SpineExtension extends SimpleExt {
                 return;
             }
 
-            const version = this.selectVersion();
+            const detectedVersion = await this.detectRuntimeVersion(
+                validation.skelFile!,
+            );
+            const version = this.selectVersion(detectedVersion);
             if (!version) {
                 alert(translate('upload.invalidVersion'));
                 return;
@@ -645,7 +952,11 @@ class SpineExtension extends SimpleExt {
             await this.refreshMenu();
         } catch (error) {
             logger.error('Upload failed:', error);
-            alert(translate('upload.failed') + ': ' + error.message);
+            alert(
+                translate('upload.failed') +
+                    ': ' +
+                    (error instanceof Error ? error.message : String(error)),
+            );
         }
     }
 
@@ -756,10 +1067,11 @@ class SpineExtension extends SimpleExt {
     async loadSkeleton(arg: { CONFIG: string; NAME: string }) {
         const { CONFIG, NAME } = arg;
 
-        const { skel, atlas, version } = JSON.parse(CONFIG) as {
+        const { skel, atlas, version, rawDataURIs } = JSON.parse(CONFIG) as {
             skel: string;
             atlas: string;
             version: VersionNames;
+            rawDataURIs?: Record<string, string>;
         };
         if (!(skel && atlas && version in spineVersions)) {
             throw new Error(translate('loadSkeleton.configError'));
@@ -768,6 +1080,7 @@ class SpineExtension extends SimpleExt {
         const { skeleton, animationState } = await manager.loadSkeleton(
             skel,
             atlas,
+            rawDataURIs,
         );
         skeleton.data.name = NAME;
         const skinId = this.renderer._nextSkinId++;
@@ -805,6 +1118,7 @@ class SpineExtension extends SimpleExt {
             }
         } catch (e) {
             logger.error(translate('typeError'), e);
+            return;
         }
         skin.skeletonRelativePos = [x, y];
     }
@@ -839,6 +1153,42 @@ class SpineExtension extends SimpleExt {
                     }
                     return JSON.stringify(names);
                 }
+                case 'skeleton.skins': {
+                    return JSON.stringify(
+                        (skeleton.data.skins || []).map((skin: any) => skin.name),
+                    );
+                }
+                case 'skeleton.slots': {
+                    return JSON.stringify(
+                        (skeleton.data.slots || []).map((slot: any) => slot.name),
+                    );
+                }
+                case 'skeleton.events': {
+                    return JSON.stringify(
+                        (skeleton.data.events || []).map((event: any) => event.name),
+                    );
+                }
+                case 'skeleton.ikConstraints': {
+                    return JSON.stringify(
+                        (skeleton.data.ikConstraints || []).map(
+                            (constraint: any) => constraint.name,
+                        ),
+                    );
+                }
+                case 'skeleton.transformConstraints': {
+                    return JSON.stringify(
+                        (skeleton.data.transformConstraints || []).map(
+                            (constraint: any) => constraint.name,
+                        ),
+                    );
+                }
+                case 'skeleton.pathConstraints': {
+                    return JSON.stringify(
+                        (skeleton.data.pathConstraints || []).map(
+                            (constraint: any) => constraint.name,
+                        ),
+                    );
+                }
                 case 'skeleton.bone': {
                     const ARG_ID = String(arg['ARG_ID']);
                     if (!ARG_ID) {
@@ -850,7 +1200,11 @@ class SpineExtension extends SimpleExt {
                             logger.error(
                                 translate('typeError'),
                                 'bone not found',
+                                ARG_ID,
+                                'available bones:',
+                                skeleton.bones.map((bone) => bone.data.name),
                             );
+                            return '';
                         }
                         return new SpineBoneReport(bone);
                     } catch (e) {
@@ -950,12 +1304,157 @@ class SpineExtension extends SimpleExt {
             }
         } catch (e) {
             logger.error(translate('typeError'), e);
+            return;
         }
         const srcVec = new Vector2(x, y);
         const dstVec = bone.parent ? bone.parent.worldToLocal(srcVec) : srcVec;
         bone.x = dstVec.x;
         bone.y = dstVec.y;
         bone.updateWorldTransform();
+    }
+
+    pointBoneTo(args: {
+        BONE: SpineBoneReport<Bone>;
+        POS: string;
+        OFFSET: number;
+    }): void {
+        const { BONE, POS, OFFSET } = args;
+        if (!(BONE && BONE instanceof SpineBoneReport)) {
+            logger.error(translate('typeError'));
+            return;
+        }
+        if (!(POS && typeof POS == 'string')) {
+            logger.error(translate('typeError'));
+            return;
+        }
+        const bone = BONE.valueOf() as any;
+        let x: number, y: number;
+        try {
+            const pos = trimPos(POS).split(',');
+            x = Number(pos[0]);
+            y = Number(pos[1]);
+            if (isNaN(x) || isNaN(y)) {
+                throw new Error(`pos (${POS}) is invalid`);
+            }
+        } catch (e) {
+            logger.error(translate('typeError'), e);
+            return;
+        }
+        const offset = Number(OFFSET) || 0;
+        const worldRotation =
+            (Math.atan2(y - bone.worldY, x - bone.worldX) * 180) / Math.PI +
+            offset;
+        bone.rotation = bone.worldToLocalRotation
+            ? bone.worldToLocalRotation(worldRotation)
+            : worldRotation;
+        bone.updateWorldTransform();
+    }
+
+    setIkTargetPos(args: {
+        SKELETON: SpineSkeletonReport<Skeleton>;
+        NAME: string;
+        POS: string;
+    }): void {
+        const { SKELETON, NAME, POS } = args;
+        if (!(SKELETON && SKELETON instanceof SpineSkeletonReport)) {
+            logger.error(translate('typeError'));
+            return;
+        }
+        const skeleton = SKELETON.valueOf() as any;
+        const constraint = skeleton.ikConstraints?.find(
+            (item: any) => item?.data?.name === String(NAME),
+        );
+        if (!constraint?.target) {
+            logger.error(translate('typeError'), 'IK constraint not found', NAME);
+            return;
+        }
+        let x: number, y: number;
+        try {
+            const pos = trimPos(POS).split(',');
+            x = Number(pos[0]);
+            y = Number(pos[1]);
+            if (isNaN(x) || isNaN(y)) {
+                throw new Error(`pos (${POS}) is invalid`);
+            }
+        } catch (e) {
+            logger.error(translate('typeError'), e);
+            return;
+        }
+        const target = constraint.target;
+        const srcVec = new Vector2(x, y);
+        const dstVec = target.parent ? target.parent.worldToLocal(srcVec) : srcVec;
+        target.x = dstVec.x;
+        target.y = dstVec.y;
+        target.updateWorldTransform();
+        skeleton.updateWorldTransform?.(2);
+    }
+
+    setSkeletonSkin(args: {
+        SKELETON: SpineSkeletonReport<Skeleton>;
+        NAME: string;
+    }) {
+        const { SKELETON, NAME } = args;
+        if (!(SKELETON && SKELETON instanceof SpineSkeletonReport)) {
+            logger.error(translate('typeError'));
+            return;
+        }
+        try {
+            const skeleton = SKELETON.valueOf() as any;
+            if (skeleton.setSkinByName) {
+                skeleton.setSkinByName(String(NAME));
+            } else {
+                const skin = skeleton.data.findSkin(String(NAME));
+                if (!skin) {
+                    throw new Error(`skin not found: ${NAME}`);
+                }
+                skeleton.setSkin(skin);
+            }
+            skeleton.setSlotsToSetupPose?.();
+            skeleton.updateWorldTransform?.(2);
+        } catch (e) {
+            logger.error(translate('typeError'), e);
+        }
+    }
+
+    setSlotAttachment(args: {
+        SKELETON: SpineSkeletonReport<Skeleton>;
+        SLOT: string;
+        ATTACHMENT: string;
+    }) {
+        const { SKELETON, SLOT, ATTACHMENT } = args;
+        if (!(SKELETON && SKELETON instanceof SpineSkeletonReport)) {
+            logger.error(translate('typeError'));
+            return;
+        }
+        try {
+            const skeleton = SKELETON.valueOf() as any;
+            skeleton.setAttachment(String(SLOT), String(ATTACHMENT));
+            skeleton.updateWorldTransform?.(2);
+        } catch (e) {
+            logger.error(translate('typeError'), e);
+        }
+    }
+
+    hideSlotAttachment(args: {
+        SKELETON: SpineSkeletonReport<Skeleton>;
+        SLOT: string;
+    }) {
+        const { SKELETON, SLOT } = args;
+        if (!(SKELETON && SKELETON instanceof SpineSkeletonReport)) {
+            logger.error(translate('typeError'));
+            return;
+        }
+        try {
+            const skeleton = SKELETON.valueOf() as any;
+            const slot = skeleton.findSlot(String(SLOT));
+            if (!slot) {
+                throw new Error(`slot not found: ${SLOT}`);
+            }
+            slot.setAttachment(null);
+            skeleton.updateWorldTransform?.(2);
+        } catch (e) {
+            logger.error(translate('typeError'), e);
+        }
     }
 
     switchDebug() {
@@ -972,12 +1471,24 @@ class SpineExtension extends SimpleExt {
         NAME: string;
         LOOP: boolean;
         ACTION: 'add' | 'set';
+        DELAY: number;
     }) {
-        const { STATE, TRACK, NAME, LOOP, ACTION } = args;
+        const { STATE, TRACK, NAME, LOOP, ACTION, DELAY } = args;
         try {
             const { animationState } = getStateAndTrack(STATE, TRACK);
+            const skeletonData = (animationState as any).data?.skeletonData;
+            if (skeletonData && !skeletonData.findAnimation(String(NAME))) {
+                logger.error(
+                    translate('typeError'),
+                    'animation not found',
+                    NAME,
+                    'available animations:',
+                    skeletonData.animations?.map((animation: any) => animation.name),
+                );
+                return;
+            }
             if (ACTION == 'add') {
-                animationState.addAnimation(TRACK, NAME, !!LOOP, 0);
+                animationState.addAnimation(TRACK, NAME, !!LOOP, Number(DELAY) || 0);
             } else {
                 animationState.setAnimation(TRACK, NAME, !!LOOP);
             }
@@ -1000,6 +1511,82 @@ class SpineExtension extends SimpleExt {
             } else {
                 animationState.setEmptyAnimation(TRACK, MIX);
             }
+        } catch (e) {
+            logger.error(translate('typeError'), e);
+        }
+    }
+
+    setDefaultMix(args: {
+        STATE: SpineAnimationStateReport<AnimationState>;
+        MIX: number;
+    }) {
+        const { STATE, MIX } = args;
+        try {
+            const state = STATE.valueOf() as any;
+            state.data.defaultMix = Math.max(0, Number(MIX) || 0);
+        } catch (e) {
+            logger.error(translate('typeError'), e);
+        }
+    }
+
+    setAnimationMix(args: {
+        STATE: SpineAnimationStateReport<AnimationState>;
+        FROM: string;
+        TO: string;
+        MIX: number;
+    }) {
+        const { STATE, FROM, TO, MIX } = args;
+        try {
+            const state = STATE.valueOf() as any;
+            state.data.setMix(String(FROM), String(TO), Math.max(0, Number(MIX) || 0));
+        } catch (e) {
+            logger.error(translate('typeError'), e);
+        }
+    }
+
+    setAnimationTimeScale(args: {
+        STATE: SpineAnimationStateReport<AnimationState>;
+        SCALE: number;
+    }) {
+        const { STATE, SCALE } = args;
+        try {
+            const state = STATE.valueOf() as any;
+            const scale = Number(SCALE);
+            state.timeScale = isNaN(scale) ? 1 : scale;
+        } catch (e) {
+            logger.error(translate('typeError'), e);
+        }
+    }
+
+    pauseAnimationState(args: { STATE: SpineAnimationStateReport<AnimationState> }) {
+        this.setAnimationTimeScale({ STATE: args.STATE, SCALE: 0 });
+    }
+
+    resumeAnimationState(args: { STATE: SpineAnimationStateReport<AnimationState> }) {
+        this.setAnimationTimeScale({ STATE: args.STATE, SCALE: 1 });
+    }
+
+    clearAnimationTrack(args: {
+        STATE: SpineAnimationStateReport<AnimationState>;
+        TRACK: number;
+    }) {
+        const { STATE, TRACK } = args;
+        try {
+            const state = STATE.valueOf() as any;
+            const track = Number(TRACK);
+            if (isNaN(track)) {
+                throw new Error('track is invalid');
+            }
+            state.clearTrack(track);
+        } catch (e) {
+            logger.error(translate('typeError'), e);
+        }
+    }
+
+    clearAnimationTracks(args: { STATE: SpineAnimationStateReport<AnimationState> }) {
+        try {
+            const state = args.STATE.valueOf() as any;
+            state.clearTracks();
         } catch (e) {
             logger.error(translate('typeError'), e);
         }

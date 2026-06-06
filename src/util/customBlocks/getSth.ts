@@ -24,6 +24,12 @@ export const getSthMenuItems = {
     'skin.animationState': { type: 'animationState' },
     'skeleton.bones': { type: 'string' },
     'skeleton.animations': { type: 'string' },
+    'skeleton.skins': { type: 'string' },
+    'skeleton.slots': { type: 'string' },
+    'skeleton.events': { type: 'string' },
+    'skeleton.ikConstraints': { type: 'string' },
+    'skeleton.transformConstraints': { type: 'string' },
+    'skeleton.pathConstraints': { type: 'string' },
     'skeleton.bone': {
         type: 'bone',
         args: [

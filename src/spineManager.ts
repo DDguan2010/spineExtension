@@ -12,7 +12,15 @@ function loadAsset<V extends VersionNames>(
     assetManager: AssetManager<V>,
     skeletonUrl: string,
     atlasUrl: string,
+    rawDataURIs?: Record<string, string>,
 ) {
+    if (rawDataURIs) {
+        for (const path in rawDataURIs) {
+            if (Object.prototype.hasOwnProperty.call(rawDataURIs, path)) {
+                (assetManager as any).setRawDataURI(path, rawDataURIs[path]);
+            }
+        }
+    }
     if (skeletonUrl.endsWith('.skel')) {
         assetManager.loadBinary(skeletonUrl);
     } else {
@@ -88,8 +96,9 @@ export class SpineManager<V extends VersionNames = VersionNames> {
     async loadSkeleton(
         skeletonUrl: string,
         atlasUrl: string,
+        rawDataURIs?: Record<string, string>,
     ): Promise<{ skeleton: Skeleton<V>; animationState: AnimationState<V> }> {
-        loadAsset(this.assetManager, skeletonUrl, atlasUrl);
+        loadAsset(this.assetManager, skeletonUrl, atlasUrl, rawDataURIs);
         await loadAll(this.assetManager);
         return parseSkeleton(
             this.assetManager,

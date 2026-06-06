@@ -13,7 +13,10 @@ export default {
     'upload.noAtlas': 'Please upload an atlas file (.atlas)',
     'upload.multipleSkeleton':
         'Only one skeleton file (.skel or .json) allowed',
+    'upload.missingAtlasImages':
+        'Atlas references image files that were not selected:\n{files}',
     'upload.selectVersion': 'Please select Spine runtime version',
+    'upload.detectedVersion': 'Detected recommended version: {version}',
     'upload.invalidVersion': 'Invalid version selection',
     'upload.confirmUpload':
         '⚠Please confirm file names are correct⚠\n{files}\nThese files will be uploaded to {folder}',
@@ -25,6 +28,8 @@ export default {
 
     'createSpineConfig.text':
         'Create Spine Config,Skeleton url:[SKEL_URL],Atlas url:[ATLAS_URL],Version:[VERSION]',
+    'createDataURLSpineConfig.text':
+        'Select local Spine files to create dataURL config, Version:[VERSION]',
 
     'loadSkeleton.text':
         'Load the spine skeleton with configuration [CONFIG] and name it [NAME]',
@@ -48,6 +53,13 @@ export default {
     'getSthMenu.skin.animationState': 'AnimationState of Skin',
     'getSthMenu.skeleton.bones': 'all names of bones in Skeleton',
     'getSthMenu.skeleton.animations': 'all names of animations in Skeleton',
+    'getSthMenu.skeleton.skins': 'all names of skins in Skeleton',
+    'getSthMenu.skeleton.slots': 'all names of slots in Skeleton',
+    'getSthMenu.skeleton.events': 'all names of events in Skeleton',
+    'getSthMenu.skeleton.ikConstraints': 'all names of IK constraints',
+    'getSthMenu.skeleton.transformConstraints':
+        'all names of transform constraints',
+    'getSthMenu.skeleton.pathConstraints': 'all names of path constraints',
     'getSthMenu.skeleton.bone': 'Bone in Skeleton',
     'getSthMenu.skeleton.bone.ID_prefix': ', Named',
     'getSthMenu.skeleton.bounds': 'AABB Bounds of Skeleton',
@@ -58,14 +70,36 @@ export default {
 
     'setBonePos.text': "Set Bone [BONE]'s world pos to [POS]",
     'setBonePos.tip': "[~,0] means don't change x, change y to 0",
+    'pointBoneTo.text':
+        'Point Bone [BONE] to stage pos [POS], angle offset [OFFSET] degrees',
+    'pointBoneTo.tip':
+        'POS format is x,y; OFFSET adjusts different bone forward directions',
+    'setIkTargetPos.text':
+        'Set IK [NAME] target position in Skeleton [SKELETON] to [POS]',
+    'setIkTargetPos.tip':
+        'POS format is x,y; the Spine resource must already have IK constraints',
+    'setSkeletonSkin.text': 'Set Skeleton [SKELETON] skin to [NAME]',
+    'setSlotAttachment.text':
+        'Set Skeleton [SKELETON] slot [SLOT] attachment to [ATTACHMENT]',
+    'hideSlotAttachment.text': 'Hide Skeleton [SKELETON] slot [SLOT] attachment',
 
     animation: 'Animation',
     'addAnimation.text':
-        'On AnimationState [STATE], track [TRACK], [ACTION] the animation named [NAME] and [LOOP] loop',
+        'On AnimationState [STATE], track [TRACK], [ACTION] animation [NAME], [LOOP] loop, delay [DELAY]s',
     'addAnimation.invalidTrack': 'Invalid Track!',
 
     'addEmptyAnimation.text':
         'On AnimationState [STATE], track [TRACK], [ACTION] empty animation, mix duration: [MIX]s',
+    'setDefaultMix.text':
+        'Set AnimationState [STATE] default animation mix duration to [MIX]s',
+    'setAnimationMix.text':
+        'Set AnimationState [STATE] mix from animation [FROM] to [TO] to [MIX]s',
+    'setAnimationTimeScale.text':
+        'Set AnimationState [STATE] playback speed to [SCALE]x',
+    'pauseAnimationState.text': 'Pause AnimationState [STATE]',
+    'resumeAnimationState.text': 'Resume AnimationState [STATE]',
+    'clearAnimationTrack.text': 'Stop AnimationState [STATE] track [TRACK]',
+    'clearAnimationTracks.text': 'Stop all tracks of AnimationState [STATE]',
     // Menu
     'spriteMenu.currentTarget': 'Current target',
 

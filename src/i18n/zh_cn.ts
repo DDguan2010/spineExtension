@@ -14,7 +14,9 @@ export default {
     'upload.noSkeleton': '请上传一个骨架文件(.skel 或 .json)',
     'upload.noAtlas': '请上传一个图集文件(.atlas)',
     'upload.multipleSkeleton': '只能上传一个骨架文件(.skel 或 .json)',
+    'upload.missingAtlasImages': 'atlas引用了未选择的图片文件:\n{files}',
     'upload.selectVersion': '请选择使用的spine运行时版本',
+    'upload.detectedVersion': '检测到推荐版本: {version}',
     'upload.invalidVersion': '版本选择无效',
     'upload.confirmUpload':
         '⚠请确认文件名是否正确⚠\n{files}\n以上文件将被上传到{folder}中',
@@ -23,6 +25,7 @@ export default {
 
     'createSpineConfig.text':
         '创建spine配置,骨骼文件url为[SKEL_URL],图集文件url为[ATLAS_URL],版本为[VERSION]',
+    'createDataURLSpineConfig.text': '选择本地Spine文件创建dataURL配置,版本为[VERSION]',
 
     'refreshMenu.text': '刷新Spine文件菜单',
     refreshing: '(刷新中)',
@@ -48,6 +51,12 @@ export default {
     'getSthMenu.skin.animationState': '皮肤的animationState',
     'getSthMenu.skeleton.bones': '骨架的全部骨骼',
     'getSthMenu.skeleton.animations': '骨架的全部动画',
+    'getSthMenu.skeleton.skins': '骨架的全部皮肤',
+    'getSthMenu.skeleton.slots': '骨架的全部slot',
+    'getSthMenu.skeleton.events': '骨架的全部事件',
+    'getSthMenu.skeleton.ikConstraints': '骨架的全部IK约束',
+    'getSthMenu.skeleton.transformConstraints': '骨架的全部Transform约束',
+    'getSthMenu.skeleton.pathConstraints': '骨架的全部Path约束',
     'getSthMenu.skeleton.bone': '骨架的骨骼',
     'getSthMenu.skeleton.bone.ID_prefix': ',名为',
     'getSthMenu.skeleton.bounds': '骨架的AABB边界盒',
@@ -58,13 +67,28 @@ export default {
 
     'setBonePos.text': '设置骨骼[BONE]的世界坐标为[POS]',
     'setBonePos.tip': '[~,0]表示x坐标不变,y坐标改为0',
+    'pointBoneTo.text': '让骨骼[BONE]指向舞台坐标[POS],角度偏移[OFFSET]度',
+    'pointBoneTo.tip': 'POS格式为x,y；OFFSET用于修正不同骨骼默认朝向',
+    'setIkTargetPos.text': '设置骨架[SKELETON]中IK[NAME]的目标位置为[POS]',
+    'setIkTargetPos.tip': 'POS格式为x,y；需要Spine资源本身已配置IK约束',
+    'setSkeletonSkin.text': '将骨架[SKELETON]的皮肤切换为[NAME]',
+    'setSlotAttachment.text': '将骨架[SKELETON]的slot[SLOT]附件设为[ATTACHMENT]',
+    'hideSlotAttachment.text': '隐藏骨架[SKELETON]的slot[SLOT]附件',
 
     animation: '动画',
     'addAnimation.text':
-        '向AnimationState[STATE]的track[TRACK][ACTION]名为[NAME]的动画并[LOOP]循环',
+        '向AnimationState[STATE]的track[TRACK][ACTION]名为[NAME]的动画并[LOOP]循环,延迟[DELAY]秒',
 
     'addEmptyAnimation.text':
         '在AnimationState[STATE]的track[TRACK]上[ACTION]空动画,混合时间[MIX]秒',
+    'setDefaultMix.text': '设置AnimationState[STATE]的默认动画过渡时间为[MIX]秒',
+    'setAnimationMix.text':
+        '设置AnimationState[STATE]从动画[FROM]到动画[TO]的过渡时间为[MIX]秒',
+    'setAnimationTimeScale.text': '设置AnimationState[STATE]的播放速度为[SCALE]倍',
+    'pauseAnimationState.text': '暂停AnimationState[STATE]',
+    'resumeAnimationState.text': '继续AnimationState[STATE]',
+    'clearAnimationTrack.text': '停止AnimationState[STATE]的track[TRACK]',
+    'clearAnimationTracks.text': '停止AnimationState[STATE]的全部track',
 
     'addAnimation.invalidTrack': '无效的track',
     // Menu
