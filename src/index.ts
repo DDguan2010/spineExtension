@@ -33,7 +33,7 @@ const insetIcon = insetIcon_;
 // 'https://m.ccw.site/creator-college/cover/5ecb4a0ae781edb9ed8ed3d61d210ad7.svg';
 const icon =
     'https://m.ccw.site/creator-college/cover/953085977e001622fd7153eb7c9ad646.png';
-const NS = 'spineAnimation' as const;
+const NS = 'spinePro' as const;
 const { BlockType, ArgumentType } = Scratch;
 const MAX_PROXY_DEPTH = 5;
 const translate = getTranslate();
