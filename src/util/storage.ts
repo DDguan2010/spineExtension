@@ -111,12 +111,32 @@ export class scratchStorageUI {
     async saveConfig(userId: string, name: string, config: RawSpineConfig) {
         const originConfig = await this.fetchConfig(userId);
         originConfig[name] = config;
+        return this.saveAllConfig(userId, originConfig);
+    }
+
+    async saveAllConfig(userId: string, config: StorageConfig) {
         return this.storeFile(
             'application/json',
             `spine/${userId}/config`,
             'json',
-            JSON.stringify(originConfig),
+            JSON.stringify(config),
         );
+    }
+
+    async deleteConfig(userId: string, name: string) {
+        const originConfig = await this.fetchConfig(userId);
+        delete originConfig[name];
+        return this.saveAllConfig(userId, originConfig);
+    }
+
+    async renameConfig(userId: string, oldName: string, newName: string) {
+        const originConfig = await this.fetchConfig(userId);
+        if (!(oldName in originConfig)) {
+            throw new Error(`config not found: ${oldName}`);
+        }
+        originConfig[newName] = originConfig[oldName];
+        delete originConfig[oldName];
+        return this.saveAllConfig(userId, originConfig);
     }
 
     // createUI() {

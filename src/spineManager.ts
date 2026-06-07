@@ -14,6 +14,12 @@ function loadAsset<V extends VersionNames>(
     atlasUrl: string,
     rawDataURIs?: Record<string, string>,
 ) {
+    if ((assetManager as any).downloader?.rawDataUris) {
+        (assetManager as any).downloader.rawDataUris = {};
+    }
+    if ((assetManager as any).rawDataUris) {
+        (assetManager as any).rawDataUris = {};
+    }
     if (rawDataURIs) {
         for (const path in rawDataURIs) {
             if (Object.prototype.hasOwnProperty.call(rawDataURIs, path)) {
@@ -98,6 +104,7 @@ export class SpineManager<V extends VersionNames = VersionNames> {
         atlasUrl: string,
         rawDataURIs?: Record<string, string>,
     ): Promise<{ skeleton: Skeleton<V>; animationState: AnimationState<V> }> {
+        this.assetManager.removeAll?.();
         loadAsset(this.assetManager, skeletonUrl, atlasUrl, rawDataURIs);
         await loadAll(this.assetManager);
         return parseSkeleton(

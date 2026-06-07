@@ -20,6 +20,9 @@ export default {
     'upload.invalidVersion': '版本选择无效',
     'upload.confirmUpload':
         '⚠请确认文件名是否正确⚠\n{files}\n以上文件将被上传到{folder}中',
+    'upload.confirmOverwrite': '配置 {name} 已存在，是否覆盖？',
+    'upload.preview':
+        '骨架文件: {skeleton}\natlas文件: {atlas}\n图片文件:\n{images}\n推荐版本: {version}',
     'upload.success': '上传完成！',
     'upload.failed': '上传失败',
 
@@ -29,6 +32,10 @@ export default {
 
     'refreshMenu.text': '刷新Spine文件菜单',
     refreshing: '(刷新中)',
+    'deleteSpineConfig.text': '删除Spine配置[NAME]',
+    'deleteSpineConfig.confirm': '确定删除Spine配置 {name} 吗？',
+    'renameSpineConfig.text': '重命名Spine配置[OLD_NAME]为[NEW_NAME]',
+    'editSpineConfig.text': '编辑Spine配置[NAME]骨骼[SKEL_URL]图集[ATLAS_URL]版本[VERSION]',
 
     'loadSkeleton.text': '加载配置为[CONFIG]的spine骨骼并命名为[NAME]',
     'loadSkeleton.configError': '请输入有效配置',
@@ -61,8 +68,14 @@ export default {
     'getSthMenu.skeleton.bone.ID_prefix': ',名为',
     'getSthMenu.skeleton.bounds': '骨架的AABB边界盒',
     'getSthMenu.bone.pos': '骨骼世界坐标',
+    'getSthMenu.bone.localRotation': '骨骼局部旋转',
+    'getSthMenu.bone.worldRotation': '骨骼世界旋转',
+    'getSthMenu.bone.scale': '骨骼缩放',
     'getSthMenu.animationState.playing': 'animationState中的动画名',
     'getSthMenu.animationState.loop': 'animationState中的动画是否循环',
+    'getSthMenu.animationState.trackTime': 'animationState中的播放时间',
+    'getSthMenu.animationState.progress': 'animationState中的播放进度',
+    'getSthMenu.animationState.event': 'animationState缓存的动画事件',
     'getSthMenu.animationState.TRACK_prefix': '在Track',
 
     'setBonePos.text': '设置骨骼[BONE]的世界坐标为[POS]',
@@ -71,9 +84,27 @@ export default {
     'pointBoneTo.tip': 'POS格式为x,y；OFFSET用于修正不同骨骼默认朝向',
     'setIkTargetPos.text': '设置骨架[SKELETON]中IK[NAME]的目标位置为[POS]',
     'setIkTargetPos.tip': 'POS格式为x,y；需要Spine资源本身已配置IK约束',
+    'getIkConstraintInfo.text': '获取骨架[SKELETON]中IK[NAME]的信息',
+    'setTransformConstraintField.text':
+        '设置骨架[SKELETON]中Transform约束[NAME]的[FIELD]为[VALUE]',
+    'getTransformConstraintInfo.text': '获取骨架[SKELETON]中Transform约束[NAME]的信息',
+    'setPathConstraintField.text':
+        '设置骨架[SKELETON]中Path约束[NAME]的[FIELD]为[VALUE]',
+    'getPathConstraintInfo.text': '获取骨架[SKELETON]中Path约束[NAME]的信息',
+    'setBoneRotation.text': '设置骨骼[BONE]的[SPACE]旋转为[ROTATION]度',
+    'setBoneScale.text': '设置骨骼[BONE]缩放为[SCALE]',
+    'convertBonePos.text': '将骨骼[BONE]坐标[POS][MODE]',
     'setSkeletonSkin.text': '将骨架[SKELETON]的皮肤切换为[NAME]',
+    'combineSkeletonSkins.text': '将骨架[SKELETON]的多个皮肤组合为[NAMES]',
+    'getSlotAttachment.text': '获取骨架[SKELETON]的slot[SLOT]当前附件',
+    'getSlotAttachments.text': '获取骨架[SKELETON]皮肤[SKIN]中slot[SLOT]可用附件',
     'setSlotAttachment.text': '将骨架[SKELETON]的slot[SLOT]附件设为[ATTACHMENT]',
     'hideSlotAttachment.text': '隐藏骨架[SKELETON]的slot[SLOT]附件',
+    'getBoundingBoxes.text': '获取骨架[SKELETON]当前可见碰撞框',
+    'getBoundingBoxVertices.text': '获取骨架[SKELETON]碰撞框[NAME]世界顶点',
+    'getBoundingBoxAabb.text': '获取骨架[SKELETON]碰撞框[NAME]的AABB',
+    'isPointInBoundingBox.text': '点[POS]在骨架[SKELETON]碰撞框[NAME]内',
+    'areBoundingBoxesIntersecting.text': '骨架[A]碰撞框[BOX_A]碰到骨架[B]碰撞框[BOX_B]',
 
     animation: '动画',
     'addAnimation.text':
@@ -89,6 +120,19 @@ export default {
     'resumeAnimationState.text': '继续AnimationState[STATE]',
     'clearAnimationTrack.text': '停止AnimationState[STATE]的track[TRACK]',
     'clearAnimationTracks.text': '停止AnimationState[STATE]的全部track',
+    'setTrackTime.text': '设置AnimationState[STATE]的track[TRACK]播放时间为[TIME]秒',
+    'setTrackProgress.text': '设置AnimationState[STATE]的track[TRACK]播放进度为[PROGRESS]',
+    'listenAnimationEvents.text': '开始监听AnimationState[STATE]的动画事件',
+    'popAnimationEvent.text': '取出AnimationState[STATE]最早的动画事件',
+    'popFilteredAnimationEvent.text':
+        '取出AnimationState[STATE]中track[TRACK]动画[ANIMATION]类型[TYPE]的事件',
+    'getAnimationStateMonitor.text': '获取AnimationState[STATE]的监视信息',
+    'registerAnimationState.text':
+        '为AnimationState[STATE]注册状态[NAME]动画[ANIMATION]track[TRACK]循环[LOOP]优先级[PRIORITY]混合[MIX]秒',
+    'setAnimationStateReturn.text': '设置AnimationState[STATE]状态[NAME]播完后[MODE]返回[RETURN]',
+    'switchAnimationState.text': '切换AnimationState[STATE]到状态[NAME]',
+    'setAnimationStateInput.text': '设置AnimationState[STATE]输入[KEY]为[VALUE]',
+    'getAnimationStateMachineInfo.text': '获取AnimationState[STATE]状态机信息',
 
     'addAnimation.invalidTrack': '无效的track',
     // Menu
@@ -96,6 +140,13 @@ export default {
 
     'animation_action_menu.add': '队列添加',
     'animation_action_menu.set': '立即播放',
+    'bone_space_menu.local': '局部',
+    'bone_space_menu.world': '世界',
+    'bone_convert_menu.worldToLocal': '转为局部坐标',
+    'bone_convert_menu.localToWorld': '转为世界坐标',
+    'state_return_mode.none': '不返回',
+    'state_return_mode.fixed': '固定状态',
+    'state_return_mode.input': '按输入',
 
     'animationCompleted.text':
         'AnimationState[STATE]的Track[TRACK]已完成一次播放',

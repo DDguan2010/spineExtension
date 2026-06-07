@@ -44,6 +44,9 @@ export const getSthMenuItems = {
         type: 'bounds',
     },
     'bone.pos': { type: 'string' },
+    'bone.localRotation': { type: 'number' },
+    'bone.worldRotation': { type: 'number' },
+    'bone.scale': { type: 'string' },
     'animationState.playing': {
         type: 'string',
         args: [
@@ -66,6 +69,29 @@ export const getSthMenuItems = {
             },
         ],
     },
+    'animationState.trackTime': {
+        type: 'number',
+        args: [
+            {
+                name: 'TRACK',
+                prefix: () =>
+                    translate('getSthMenu.animationState.TRACK_prefix'),
+                type: 'math_number',
+            },
+        ],
+    },
+    'animationState.progress': {
+        type: 'number',
+        args: [
+            {
+                name: 'TRACK',
+                prefix: () =>
+                    translate('getSthMenu.animationState.TRACK_prefix'),
+                type: 'math_number',
+            },
+        ],
+    },
+    'animationState.event': { type: 'string' },
 } as const satisfies {
     [K in `${'skin' | 'skeleton' | 'bone' | 'animationState'}.${string}`]: {
         type: string;

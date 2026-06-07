@@ -39,6 +39,31 @@ const MAX_PROXY_DEPTH = 5;
 const translate = getTranslate();
 let logger = getLogger('console', NS);
 type Util = VM.BlockUtility;
+type SpineEventRecord = {
+    type: string;
+    track: number;
+    animation: string;
+    name: string;
+    intValue?: number;
+    floatValue?: number;
+    stringValue?: string;
+};
+type AnimationStateMachineState = {
+    animation: string;
+    track: number;
+    loop: boolean;
+    mix: number;
+    priority: number;
+    returnMode: 'none' | 'fixed' | 'input';
+    returnState: string;
+    allowInterruptBy: string[];
+};
+type AnimationStateMachine = {
+    currentState: string;
+    previousState: string;
+    states: Record<string, AnimationStateMachineState>;
+    inputContext: Record<string, string>;
+};
 
 function createADSProxy(target: object, depth: number = 0) {
     if (depth >= MAX_PROXY_DEPTH) {
@@ -77,6 +102,204 @@ function createADSProxy(target: object, depth: number = 0) {
     }
 }
 
+function parsePair(value: string, label: string): [number, number] {
+    const pair = trimPos(String(value)).split(',');
+    const x = Number(pair[0]);
+    const y = Number(pair[1]);
+    if (isNaN(x) || isNaN(y)) {
+        throw new Error(`${label} (${value}) is invalid`);
+    }
+    return [x, y];
+}
+
+function getAnimationDuration(track: any) {
+    return Math.max(
+        0,
+        Number(track?.animationEnd ?? track?.animation?.duration ?? 0) -
+            Number(track?.animationStart ?? 0),
+    );
+}
+
+function getTrackAnimationTime(track: any) {
+    if (typeof track?.getAnimationTime === 'function') {
+        return track.getAnimationTime();
+    }
+    return track?.trackTime ?? 0;
+}
+
+function getSlotAttachmentName(slot: any) {
+    const attachment = slot?.getAttachment ? slot.getAttachment() : slot?.attachment;
+    return attachment?.name || '';
+}
+
+function getSkinAttachmentNames(skin: any, slotIndex: number) {
+    const entries: any[] = [];
+    if (skin?.getAttachmentsForSlot) {
+        skin.getAttachmentsForSlot(slotIndex, entries);
+        return entries.map((entry) => entry.name);
+    }
+    const attachments = skin?.attachments?.[slotIndex];
+    return attachments ? Object.keys(attachments) : [];
+}
+
+function findSlotIndex(skeleton: any, slotName: string) {
+    if (typeof skeleton.findSlotIndex === 'function') {
+        return skeleton.findSlotIndex(slotName);
+    }
+    if (typeof skeleton.data?.findSlotIndex === 'function') {
+        return skeleton.data.findSlotIndex(slotName);
+    }
+    return (skeleton.data?.slots || []).findIndex((slot: any) => slot.name === slotName);
+}
+
+function toBoolean(value: unknown) {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'string') return value === 'true';
+    return !!value;
+}
+
+function parseCsv(value: string) {
+    return String(value)
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+}
+
+function findConstraint(items: any[], name: string) {
+    return (items || []).find((item) => item?.data?.name === name || item?.name === name);
+}
+
+function getConstraintField(constraint: any, field: string) {
+    return constraint?.[field] ?? constraint?.data?.[field];
+}
+
+function setConstraintField(constraint: any, field: string, value: number) {
+    if (field in constraint) {
+        constraint[field] = value;
+        return true;
+    }
+    return false;
+}
+
+function isBoundingBoxAttachment(attachment: any) {
+    const ctorName = attachment?.constructor?.name || '';
+    if (ctorName.includes('BoundingBox')) return true;
+    return (
+        Array.isArray(attachment?.vertices) &&
+        !('path' in attachment) &&
+        !('region' in attachment) &&
+        !('endSlot' in attachment) &&
+        !('lengths' in attachment)
+    );
+}
+
+function getSlotCurrentAttachment(slot: any) {
+    return slot?.getAttachment ? slot.getAttachment() : slot?.attachment;
+}
+
+function collectBoundingBoxes(skeleton: any) {
+    const boxes: { name: string; slot: any; attachment: any }[] = [];
+    for (const slot of skeleton.slots || []) {
+        const attachment = getSlotCurrentAttachment(slot);
+        if (isBoundingBoxAttachment(attachment)) {
+            boxes.push({
+                name: attachment.name || slot.data?.attachmentName || slot.data?.name || '',
+                slot,
+                attachment,
+            });
+        }
+    }
+    return boxes;
+}
+
+function computeBoundingBoxVertices(skeleton: any, name: string) {
+    const box = collectBoundingBoxes(skeleton).find(
+        (item) => item.name === name || item.slot?.data?.name === name,
+    );
+    if (!box) return null;
+    const length = box.attachment.worldVerticesLength || box.attachment.vertices?.length || 0;
+    const vertices = new Array(length).fill(0);
+    box.attachment.computeWorldVertices(box.slot, 0, length, vertices, 0, 2);
+    const points: [number, number][] = [];
+    for (let i = 0; i < vertices.length; i += 2) {
+        points.push([vertices[i], vertices[i + 1]]);
+    }
+    return points;
+}
+
+function getAabb(points: [number, number][]) {
+    if (!points.length) return { x: 0, y: 0, width: 0, height: 0 };
+    const xs = points.map((point) => point[0]);
+    const ys = points.map((point) => point[1]);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+function pointInPolygon(point: [number, number], polygon: [number, number][]) {
+    if (polygon.length < 3) return false;
+    let inside = false;
+    const [x, y] = point;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+        const [xi, yi] = polygon[i];
+        const [xj, yj] = polygon[j];
+        const intersect = yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi;
+        if (intersect) inside = !inside;
+    }
+    return inside;
+}
+
+function cross(a: [number, number], b: [number, number], c: [number, number]) {
+    return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+}
+
+function segmentsIntersect(
+    a1: [number, number],
+    a2: [number, number],
+    b1: [number, number],
+    b2: [number, number],
+) {
+    const c1 = cross(a1, a2, b1);
+    const c2 = cross(a1, a2, b2);
+    const c3 = cross(b1, b2, a1);
+    const c4 = cross(b1, b2, a2);
+    return c1 * c2 <= 0 && c3 * c4 <= 0;
+}
+
+function polygonEdgesIntersect(a: [number, number][], b: [number, number][]) {
+    for (let i = 0; i < a.length; i++) {
+        const a1 = a[i];
+        const a2 = a[(i + 1) % a.length];
+        for (let j = 0; j < b.length; j++) {
+            if (segmentsIntersect(a1, a2, b[j], b[(j + 1) % b.length])) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+function polygonsIntersect(a: [number, number][], b: [number, number][]) {
+    if (a.length < 3 || b.length < 3) return false;
+    const aabbA = getAabb(a);
+    const aabbB = getAabb(b);
+    if (
+        aabbA.x + aabbA.width < aabbB.x ||
+        aabbB.x + aabbB.width < aabbA.x ||
+        aabbA.y + aabbA.height < aabbB.y ||
+        aabbB.y + aabbB.height < aabbA.y
+    ) {
+        return false;
+    }
+    return (
+        a.some((point) => pointInPolygon(point, b)) ||
+        b.some((point) => pointInPolygon(point, a)) ||
+        polygonEdgesIntersect(a, b)
+    );
+}
+
 class SpineExtension extends SimpleExt {
     runtime: GandiRuntime;
     managers: {
@@ -88,6 +311,8 @@ class SpineExtension extends SimpleExt {
     storage: scratchStorageUI;
     cloudConfig: StorageConfig;
     fetchingConfig: boolean;
+    animationEvents: WeakMap<object, SpineEventRecord[]>;
+    stateMachines: WeakMap<object, AnimationStateMachine>;
 
     constructor(runtime: GandiRuntime) {
         super(NS, 'foo');
@@ -108,6 +333,8 @@ class SpineExtension extends SimpleExt {
         this.skins = [];
         this.cloudConfig = {};
         this.fetchingConfig = false;
+        this.animationEvents = new WeakMap();
+        this.stateMachines = new WeakMap();
         this.refreshMenu();
     }
 
@@ -234,6 +461,55 @@ class SpineExtension extends SimpleExt {
                 },
                 blockType: BlockType.BUTTON,
                 func: this.refreshMenu.name,
+            },
+            {
+                opcode: this.deleteSpineConfig.name,
+                text: translate('deleteSpineConfig.text'),
+                blockType: BlockType.COMMAND,
+                arguments: {
+                    NAME: {
+                        type: ArgumentType.STRING,
+                        defaultValue: 'configName',
+                    },
+                },
+            },
+            {
+                opcode: this.renameSpineConfig.name,
+                text: translate('renameSpineConfig.text'),
+                blockType: BlockType.COMMAND,
+                arguments: {
+                    OLD_NAME: {
+                        type: ArgumentType.STRING,
+                        defaultValue: 'oldName',
+                    },
+                    NEW_NAME: {
+                        type: ArgumentType.STRING,
+                        defaultValue: 'newName',
+                    },
+                },
+            },
+            {
+                opcode: this.editSpineConfig.name,
+                text: translate('editSpineConfig.text'),
+                blockType: BlockType.COMMAND,
+                arguments: {
+                    NAME: {
+                        type: ArgumentType.STRING,
+                        defaultValue: 'configName',
+                    },
+                    SKEL_URL: {
+                        type: ArgumentType.STRING,
+                        defaultValue: 'spine/example.skel',
+                    },
+                    ATLAS_URL: {
+                        type: ArgumentType.STRING,
+                        defaultValue: 'spine/example.atlas',
+                    },
+                    VERSION: {
+                        type: ArgumentType.STRING,
+                        menu: 'VERSION',
+                    },
+                },
             },
             {
                 opcode: this.createSpineConfig.name,
@@ -379,6 +655,142 @@ class SpineExtension extends SimpleExt {
                 },
             },
             {
+                opcode: this.getIkConstraintInfo.name,
+                blockType: BlockType.REPORTER,
+                text: translate('getIkConstraintInfo.text'),
+                arguments: {
+                    SKELETON: {
+                        type: null,
+                    },
+                    NAME: {
+                        type: ArgumentType.STRING,
+                        defaultValue: 'ik',
+                    },
+                },
+            },
+            {
+                opcode: this.setTransformConstraintField.name,
+                blockType: BlockType.COMMAND,
+                text: translate('setTransformConstraintField.text'),
+                arguments: {
+                    SKELETON: {
+                        type: null,
+                    },
+                    NAME: {
+                        type: ArgumentType.STRING,
+                        defaultValue: 'transform',
+                    },
+                    FIELD: {
+                        type: ArgumentType.STRING,
+                        menu: 'transform_constraint_field_menu',
+                    },
+                    VALUE: {
+                        type: ArgumentType.NUMBER,
+                        defaultValue: 1,
+                    },
+                },
+            },
+            {
+                opcode: this.getTransformConstraintInfo.name,
+                blockType: BlockType.REPORTER,
+                text: translate('getTransformConstraintInfo.text'),
+                arguments: {
+                    SKELETON: {
+                        type: null,
+                    },
+                    NAME: {
+                        type: ArgumentType.STRING,
+                        defaultValue: 'transform',
+                    },
+                },
+            },
+            {
+                opcode: this.setPathConstraintField.name,
+                blockType: BlockType.COMMAND,
+                text: translate('setPathConstraintField.text'),
+                arguments: {
+                    SKELETON: {
+                        type: null,
+                    },
+                    NAME: {
+                        type: ArgumentType.STRING,
+                        defaultValue: 'path',
+                    },
+                    FIELD: {
+                        type: ArgumentType.STRING,
+                        menu: 'path_constraint_field_menu',
+                    },
+                    VALUE: {
+                        type: ArgumentType.NUMBER,
+                        defaultValue: 0,
+                    },
+                },
+            },
+            {
+                opcode: this.getPathConstraintInfo.name,
+                blockType: BlockType.REPORTER,
+                text: translate('getPathConstraintInfo.text'),
+                arguments: {
+                    SKELETON: {
+                        type: null,
+                    },
+                    NAME: {
+                        type: ArgumentType.STRING,
+                        defaultValue: 'path',
+                    },
+                },
+            },
+            {
+                opcode: this.setBoneRotation.name,
+                blockType: BlockType.COMMAND,
+                text: translate('setBoneRotation.text'),
+                arguments: {
+                    BONE: {
+                        type: null,
+                    },
+                    ROTATION: {
+                        type: ArgumentType.NUMBER,
+                        defaultValue: 0,
+                    },
+                    SPACE: {
+                        type: ArgumentType.STRING,
+                        menu: 'bone_space_menu',
+                    },
+                },
+            },
+            {
+                opcode: this.setBoneScale.name,
+                blockType: BlockType.COMMAND,
+                text: translate('setBoneScale.text'),
+                arguments: {
+                    BONE: {
+                        type: null,
+                    },
+                    SCALE: {
+                        type: ArgumentType.STRING,
+                        defaultValue: '1, 1',
+                    },
+                },
+            },
+            {
+                opcode: this.convertBonePos.name,
+                blockType: BlockType.REPORTER,
+                text: translate('convertBonePos.text'),
+                arguments: {
+                    BONE: {
+                        type: null,
+                    },
+                    POS: {
+                        type: ArgumentType.STRING,
+                        defaultValue: '0, 0',
+                    },
+                    MODE: {
+                        type: ArgumentType.STRING,
+                        menu: 'bone_convert_menu',
+                    },
+                },
+            },
+            {
                 opcode: this.setSkeletonSkin.name,
                 blockType: BlockType.COMMAND,
                 text: translate('setSkeletonSkin.text'),
@@ -387,6 +799,52 @@ class SpineExtension extends SimpleExt {
                         type: null,
                     },
                     NAME: {
+                        type: ArgumentType.STRING,
+                        defaultValue: 'default',
+                    },
+                },
+            },
+            {
+                opcode: this.combineSkeletonSkins.name,
+                blockType: BlockType.COMMAND,
+                text: translate('combineSkeletonSkins.text'),
+                arguments: {
+                    SKELETON: {
+                        type: null,
+                    },
+                    NAMES: {
+                        type: ArgumentType.STRING,
+                        defaultValue: 'skin1, skin2',
+                    },
+                },
+            },
+            {
+                opcode: this.getSlotAttachment.name,
+                blockType: BlockType.REPORTER,
+                text: translate('getSlotAttachment.text'),
+                arguments: {
+                    SKELETON: {
+                        type: null,
+                    },
+                    SLOT: {
+                        type: ArgumentType.STRING,
+                        defaultValue: 'slot',
+                    },
+                },
+            },
+            {
+                opcode: this.getSlotAttachments.name,
+                blockType: BlockType.REPORTER,
+                text: translate('getSlotAttachments.text'),
+                arguments: {
+                    SKELETON: {
+                        type: null,
+                    },
+                    SLOT: {
+                        type: ArgumentType.STRING,
+                        defaultValue: 'slot',
+                    },
+                    SKIN: {
                         type: ArgumentType.STRING,
                         defaultValue: 'default',
                     },
@@ -421,6 +879,83 @@ class SpineExtension extends SimpleExt {
                     SLOT: {
                         type: ArgumentType.STRING,
                         defaultValue: 'slot',
+                    },
+                },
+            },
+            {
+                opcode: this.getBoundingBoxes.name,
+                blockType: BlockType.REPORTER,
+                text: translate('getBoundingBoxes.text'),
+                arguments: {
+                    SKELETON: {
+                        type: null,
+                    },
+                },
+            },
+            {
+                opcode: this.getBoundingBoxVertices.name,
+                blockType: BlockType.REPORTER,
+                text: translate('getBoundingBoxVertices.text'),
+                arguments: {
+                    SKELETON: {
+                        type: null,
+                    },
+                    NAME: {
+                        type: ArgumentType.STRING,
+                        defaultValue: 'hitbox',
+                    },
+                },
+            },
+            {
+                opcode: this.getBoundingBoxAabb.name,
+                blockType: BlockType.REPORTER,
+                text: translate('getBoundingBoxAabb.text'),
+                arguments: {
+                    SKELETON: {
+                        type: null,
+                    },
+                    NAME: {
+                        type: ArgumentType.STRING,
+                        defaultValue: 'hitbox',
+                    },
+                },
+            },
+            {
+                opcode: this.isPointInBoundingBox.name,
+                blockType: BlockType.BOOLEAN,
+                text: translate('isPointInBoundingBox.text'),
+                arguments: {
+                    POS: {
+                        type: ArgumentType.STRING,
+                        defaultValue: '0, 0',
+                    },
+                    SKELETON: {
+                        type: null,
+                    },
+                    NAME: {
+                        type: ArgumentType.STRING,
+                        defaultValue: 'hitbox',
+                    },
+                },
+            },
+            {
+                opcode: this.areBoundingBoxesIntersecting.name,
+                blockType: BlockType.BOOLEAN,
+                text: translate('areBoundingBoxesIntersecting.text'),
+                arguments: {
+                    A: {
+                        type: null,
+                    },
+                    BOX_A: {
+                        type: ArgumentType.STRING,
+                        defaultValue: 'attack',
+                    },
+                    B: {
+                        type: null,
+                    },
+                    BOX_B: {
+                        type: ArgumentType.STRING,
+                        defaultValue: 'body',
                     },
                 },
             },
@@ -575,6 +1110,192 @@ class SpineExtension extends SimpleExt {
                 blockType: BlockType.COMMAND,
             },
             {
+                opcode: this.setTrackTime.name,
+                text: translate('setTrackTime.text'),
+                arguments: {
+                    STATE: {
+                        type: null,
+                    },
+                    TRACK: {
+                        type: ArgumentType.NUMBER,
+                        defaultValue: 0,
+                    },
+                    TIME: {
+                        type: ArgumentType.NUMBER,
+                        defaultValue: 0,
+                    },
+                },
+                blockType: BlockType.COMMAND,
+            },
+            {
+                opcode: this.setTrackProgress.name,
+                text: translate('setTrackProgress.text'),
+                arguments: {
+                    STATE: {
+                        type: null,
+                    },
+                    TRACK: {
+                        type: ArgumentType.NUMBER,
+                        defaultValue: 0,
+                    },
+                    PROGRESS: {
+                        type: ArgumentType.NUMBER,
+                        defaultValue: 0.5,
+                    },
+                },
+                blockType: BlockType.COMMAND,
+            },
+            {
+                opcode: this.listenAnimationEvents.name,
+                text: translate('listenAnimationEvents.text'),
+                arguments: {
+                    STATE: {
+                        type: null,
+                    },
+                },
+                blockType: BlockType.COMMAND,
+            },
+            {
+                opcode: this.popAnimationEvent.name,
+                text: translate('popAnimationEvent.text'),
+                arguments: {
+                    STATE: {
+                        type: null,
+                    },
+                },
+                blockType: BlockType.REPORTER,
+            },
+            {
+                opcode: this.popFilteredAnimationEvent.name,
+                text: translate('popFilteredAnimationEvent.text'),
+                arguments: {
+                    STATE: {
+                        type: null,
+                    },
+                    TRACK: {
+                        type: ArgumentType.NUMBER,
+                        defaultValue: -1,
+                    },
+                    ANIMATION: {
+                        type: ArgumentType.STRING,
+                        defaultValue: '',
+                    },
+                    TYPE: {
+                        type: ArgumentType.STRING,
+                        defaultValue: '',
+                    },
+                },
+                blockType: BlockType.REPORTER,
+            },
+            {
+                opcode: this.getAnimationStateMonitor.name,
+                text: translate('getAnimationStateMonitor.text'),
+                arguments: {
+                    STATE: {
+                        type: null,
+                    },
+                },
+                blockType: BlockType.REPORTER,
+            },
+            {
+                opcode: this.registerAnimationState.name,
+                text: translate('registerAnimationState.text'),
+                arguments: {
+                    STATE: {
+                        type: null,
+                    },
+                    NAME: {
+                        type: ArgumentType.STRING,
+                        defaultValue: 'idle',
+                    },
+                    ANIMATION: {
+                        type: ArgumentType.STRING,
+                        defaultValue: 'idle',
+                    },
+                    TRACK: {
+                        type: ArgumentType.NUMBER,
+                        defaultValue: 0,
+                    },
+                    LOOP: {
+                        type: ArgumentType.STRING,
+                        menu: 'BOOLEAN',
+                    },
+                    PRIORITY: {
+                        type: ArgumentType.NUMBER,
+                        defaultValue: 0,
+                    },
+                    MIX: {
+                        type: ArgumentType.NUMBER,
+                        defaultValue: 0.2,
+                    },
+                },
+                blockType: BlockType.COMMAND,
+            },
+            {
+                opcode: this.setAnimationStateReturn.name,
+                text: translate('setAnimationStateReturn.text'),
+                arguments: {
+                    STATE: {
+                        type: null,
+                    },
+                    NAME: {
+                        type: ArgumentType.STRING,
+                        defaultValue: 'jump',
+                    },
+                    MODE: {
+                        type: ArgumentType.STRING,
+                        menu: 'state_return_mode_menu',
+                    },
+                    RETURN: {
+                        type: ArgumentType.STRING,
+                        defaultValue: 'idle',
+                    },
+                },
+                blockType: BlockType.COMMAND,
+            },
+            {
+                opcode: this.switchAnimationState.name,
+                text: translate('switchAnimationState.text'),
+                arguments: {
+                    STATE: {
+                        type: null,
+                    },
+                    NAME: {
+                        type: ArgumentType.STRING,
+                        defaultValue: 'idle',
+                    },
+                },
+                blockType: BlockType.COMMAND,
+            },
+            {
+                opcode: this.setAnimationStateInput.name,
+                text: translate('setAnimationStateInput.text'),
+                arguments: {
+                    STATE: {
+                        type: null,
+                    },
+                    KEY: {
+                        type: ArgumentType.STRING,
+                        defaultValue: 'moving',
+                    },
+                    VALUE: {
+                        type: ArgumentType.STRING,
+                        defaultValue: 'idle',
+                    },
+                },
+                blockType: BlockType.COMMAND,
+            },
+            {
+                opcode: this.getAnimationStateMachineInfo.name,
+                text: translate('getAnimationStateMachineInfo.text'),
+                arguments: {
+                    STATE: {
+                        type: null,
+                    },
+                },
+                blockType: BlockType.REPORTER,
+            },
+            {
                 opcode: this.animationCompleted.name,
                 text: translate('animationCompleted.text'),
                 arguments: {
@@ -613,6 +1334,52 @@ class SpineExtension extends SimpleExt {
                         text: translate('animation_action_menu.set'),
                         value: 'set',
                     },
+                ],
+                acceptReporters: true,
+            },
+            bone_space_menu: {
+                items: [
+                    {
+                        text: translate('bone_space_menu.local'),
+                        value: 'local',
+                    },
+                    {
+                        text: translate('bone_space_menu.world'),
+                        value: 'world',
+                    },
+                ],
+                acceptReporters: true,
+            },
+            bone_convert_menu: {
+                items: [
+                    {
+                        text: translate('bone_convert_menu.worldToLocal'),
+                        value: 'worldToLocal',
+                    },
+                    {
+                        text: translate('bone_convert_menu.localToWorld'),
+                        value: 'localToWorld',
+                    },
+                ],
+                acceptReporters: true,
+            },
+            transform_constraint_field_menu: {
+                items: ['rotateMix', 'translateMix', 'scaleMix', 'shearMix'].map(
+                    (value) => ({ text: value, value }),
+                ),
+                acceptReporters: true,
+            },
+            path_constraint_field_menu: {
+                items: ['position', 'spacing', 'rotateMix', 'translateMix'].map(
+                    (value) => ({ text: value, value }),
+                ),
+                acceptReporters: true,
+            },
+            state_return_mode_menu: {
+                items: [
+                    { text: translate('state_return_mode.none'), value: 'none' },
+                    { text: translate('state_return_mode.fixed'), value: 'fixed' },
+                    { text: translate('state_return_mode.input'), value: 'input' },
                 ],
                 acceptReporters: true,
             },
@@ -872,7 +1639,11 @@ class SpineExtension extends SimpleExt {
                 rootFolder + fileName,
                 ext,
                 await file.arrayBuffer(),
-            );
+            ).catch((error) => {
+                throw new Error(
+                    `${file.name}: ${error instanceof Error ? error.message : String(error)}`,
+                );
+            });
         });
 
         await Promise.all(uploadPromises);
@@ -893,6 +1664,16 @@ class SpineExtension extends SimpleExt {
             }
 
             const rootFolder = userAssetUrl + spineFolder.trim() + '/';
+            if (
+                this.cloudConfig[spineFolder.trim()] &&
+                !confirm(
+                    translate('upload.confirmOverwrite', {
+                        name: spineFolder.trim(),
+                    }),
+                )
+            ) {
+                return;
+            }
 
             const files = await this.selectFiles();
             if (!files || files.length === 0) {
@@ -918,9 +1699,24 @@ class SpineExtension extends SimpleExt {
                 return;
             }
 
+            const detectedVersion = await this.detectRuntimeVersion(
+                validation.skelFile!,
+            );
+            const imageList = files
+                .filter((file) => file.name.toLowerCase().endsWith('.png'))
+                .map((file) => file.name)
+                .join('\n');
             const fileList = files.map((f) => f.name).join('\n');
             const confirmMsg = translate('upload.confirmUpload', {
-                files: fileList,
+                files:
+                    translate('upload.preview', {
+                        skeleton: validation.skelFile!.name,
+                        atlas: validation.atlasFile!.name,
+                        images: imageList || '(none)',
+                        version: detectedVersion || '(unknown)',
+                    }) +
+                    '\n\n' +
+                    fileList,
                 folder: rootFolder,
             });
 
@@ -928,9 +1724,6 @@ class SpineExtension extends SimpleExt {
                 return;
             }
 
-            const detectedVersion = await this.detectRuntimeVersion(
-                validation.skelFile!,
-            );
             const version = this.selectVersion(detectedVersion);
             if (!version) {
                 alert(translate('upload.invalidVersion'));
@@ -1022,6 +1815,47 @@ class SpineExtension extends SimpleExt {
         return menuItems;
     }
 
+    async deleteSpineConfig(args: { NAME: string }) {
+        const name = String(args.NAME || '').trim();
+        if (!name) return;
+        if (!confirm(translate('deleteSpineConfig.confirm', { name }))) return;
+        const { userId } = await this.runtime.ccwAPI.getUserInfo();
+        await this.storage.deleteConfig(userId, name);
+        await this.refreshMenu();
+    }
+
+    async renameSpineConfig(args: { OLD_NAME: string; NEW_NAME: string }) {
+        const oldName = String(args.OLD_NAME || '').trim();
+        const newName = String(args.NEW_NAME || '').trim();
+        if (!(oldName && newName)) return;
+        if (
+            this.cloudConfig[newName] &&
+            !confirm(translate('upload.confirmOverwrite', { name: newName }))
+        ) {
+            return;
+        }
+        const { userId } = await this.runtime.ccwAPI.getUserInfo();
+        await this.storage.renameConfig(userId, oldName, newName);
+        await this.refreshMenu();
+    }
+
+    async editSpineConfig(args: {
+        NAME: string;
+        SKEL_URL: string;
+        ATLAS_URL: string;
+        VERSION: VersionNames;
+    }) {
+        const name = String(args.NAME || '').trim();
+        if (!name) return;
+        const { userId } = await this.runtime.ccwAPI.getUserInfo();
+        await this.storage.saveConfig(userId, name, {
+            skel: String(args.SKEL_URL),
+            atlas: String(args.ATLAS_URL),
+            version: args.VERSION,
+        });
+        await this.refreshMenu();
+    }
+
     setSkinSkeleton(
         arg: { TARGET_NAME: string; SKELETON: number | SpineSkinReport },
         util: Util,
@@ -1054,6 +1888,7 @@ class SpineExtension extends SimpleExt {
                         name: TARGET_NAME,
                     }),
                 );
+                return;
             }
         }
         const drawableId = target.drawableID;
@@ -1067,12 +1902,18 @@ class SpineExtension extends SimpleExt {
     async loadSkeleton(arg: { CONFIG: string; NAME: string }) {
         const { CONFIG, NAME } = arg;
 
-        const { skel, atlas, version, rawDataURIs } = JSON.parse(CONFIG) as {
+        let config: {
             skel: string;
             atlas: string;
             version: VersionNames;
             rawDataURIs?: Record<string, string>;
         };
+        try {
+            config = JSON.parse(CONFIG);
+        } catch (e) {
+            throw new Error(translate('loadSkeleton.configError'));
+        }
+        const { skel, atlas, version, rawDataURIs } = config;
         if (!(skel && atlas && version in spineVersions)) {
             throw new Error(translate('loadSkeleton.configError'));
         }
@@ -1254,6 +2095,19 @@ class SpineExtension extends SimpleExt {
             switch (KEY) {
                 case 'bone.pos':
                     return JSON.stringify([bone.worldX, bone.worldY]);
+                case 'bone.localRotation':
+                    return String((bone as any).rotation ?? 0);
+                case 'bone.worldRotation':
+                    return String(
+                        (bone as any).getWorldRotationX
+                            ? (bone as any).getWorldRotationX()
+                            : ((bone as any).worldRotationX ?? (bone as any).rotation ?? 0),
+                    );
+                case 'bone.scale':
+                    return JSON.stringify([
+                        (bone as any).scaleX ?? 1,
+                        (bone as any).scaleY ?? 1,
+                    ]);
             }
         }
         if (DATA instanceof SpineAnimationStateReport) {
@@ -1262,6 +2116,10 @@ class SpineExtension extends SimpleExt {
                 return '';
             }
             const state = DATA.valueOf();
+            if (KEY === 'animationState.event') {
+                const events = this.animationEvents.get(state as any) || [];
+                return JSON.stringify(events[0] || null);
+            }
             const ARG_TRACK = Number(arg['ARG_TRACK']);
             if (isNaN(ARG_TRACK)) {
                 logger.error(translate('typeError'));
@@ -1277,6 +2135,13 @@ class SpineExtension extends SimpleExt {
                     return track.animation.name;
                 case 'animationState.loop':
                     return String(track.loop);
+                case 'animationState.trackTime':
+                    return String(getTrackAnimationTime(track));
+                case 'animationState.progress': {
+                    const duration = getAnimationDuration(track);
+                    if (!duration) return '0';
+                    return String(getTrackAnimationTime(track) / duration);
+                }
             }
         }
         logger.error(translate('typeError'));
@@ -1350,6 +2215,69 @@ class SpineExtension extends SimpleExt {
         bone.updateWorldTransform();
     }
 
+    setBoneRotation(args: {
+        BONE: SpineBoneReport<Bone>;
+        ROTATION: number;
+        SPACE: 'local' | 'world';
+    }): void {
+        const { BONE, ROTATION, SPACE } = args;
+        if (!(BONE && BONE instanceof SpineBoneReport)) {
+            logger.error(translate('typeError'));
+            return;
+        }
+        const bone = BONE.valueOf() as any;
+        const rotation = Number(ROTATION);
+        if (isNaN(rotation)) {
+            logger.error(translate('typeError'), 'rotation is invalid');
+            return;
+        }
+        bone.rotation = SPACE === 'world' && bone.worldToLocalRotation
+            ? bone.worldToLocalRotation(rotation)
+            : rotation;
+        bone.updateWorldTransform();
+    }
+
+    setBoneScale(args: { BONE: SpineBoneReport<Bone>; SCALE: string }): void {
+        const { BONE, SCALE } = args;
+        if (!(BONE && BONE instanceof SpineBoneReport)) {
+            logger.error(translate('typeError'));
+            return;
+        }
+        try {
+            const [x, y] = parsePair(SCALE, 'scale');
+            const bone = BONE.valueOf() as any;
+            bone.scaleX = x;
+            bone.scaleY = y;
+            bone.updateWorldTransform();
+        } catch (e) {
+            logger.error(translate('typeError'), e);
+        }
+    }
+
+    convertBonePos(args: {
+        BONE: SpineBoneReport<Bone>;
+        POS: string;
+        MODE: 'worldToLocal' | 'localToWorld';
+    }) {
+        const { BONE, POS, MODE } = args;
+        if (!(BONE && BONE instanceof SpineBoneReport)) {
+            logger.error(translate('typeError'));
+            return '';
+        }
+        try {
+            const [x, y] = parsePair(POS, 'pos');
+            const bone = BONE.valueOf() as any;
+            const vec = new Vector2(x, y);
+            const result = MODE === 'localToWorld'
+                ? bone.localToWorld(vec)
+                : bone.worldToLocal(vec);
+            return JSON.stringify([result.x, result.y]);
+        } catch (e) {
+            logger.error(translate('typeError'), e);
+            return '';
+        }
+    }
+
     setIkTargetPos(args: {
         SKELETON: SpineSkeletonReport<Skeleton>;
         NAME: string;
@@ -1389,6 +2317,115 @@ class SpineExtension extends SimpleExt {
         skeleton.updateWorldTransform?.(2);
     }
 
+    getIkConstraintInfo(args: {
+        SKELETON: SpineSkeletonReport<Skeleton>;
+        NAME: string;
+    }) {
+        const { SKELETON, NAME } = args;
+        if (!(SKELETON && SKELETON instanceof SpineSkeletonReport)) {
+            logger.error(translate('typeError'));
+            return '';
+        }
+        const skeleton = SKELETON.valueOf() as any;
+        const constraint = findConstraint(skeleton.ikConstraints, String(NAME));
+        if (!constraint) {
+            logger.error(translate('typeError'), `IK constraint not found: ${NAME}`);
+            return '';
+        }
+        return JSON.stringify({
+            name: constraint.data?.name || NAME,
+            target: constraint.target?.data?.name || constraint.target?.name || '',
+            mix: getConstraintField(constraint, 'mix'),
+            bendDirection: getConstraintField(constraint, 'bendDirection'),
+        });
+    }
+
+    setTransformConstraintField(args: {
+        SKELETON: SpineSkeletonReport<Skeleton>;
+        NAME: string;
+        FIELD: string;
+        VALUE: number;
+    }) {
+        const { SKELETON, NAME, FIELD, VALUE } = args;
+        if (!(SKELETON && SKELETON instanceof SpineSkeletonReport)) {
+            logger.error(translate('typeError'));
+            return;
+        }
+        const skeleton = SKELETON.valueOf() as any;
+        const constraint = findConstraint(skeleton.transformConstraints, String(NAME));
+        const value = Number(VALUE);
+        if (!(constraint && !isNaN(value) && setConstraintField(constraint, String(FIELD), value))) {
+            logger.error(translate('typeError'), `transform constraint field invalid: ${NAME}.${FIELD}`);
+        }
+    }
+
+    getTransformConstraintInfo(args: {
+        SKELETON: SpineSkeletonReport<Skeleton>;
+        NAME: string;
+    }) {
+        const { SKELETON, NAME } = args;
+        if (!(SKELETON && SKELETON instanceof SpineSkeletonReport)) {
+            logger.error(translate('typeError'));
+            return '';
+        }
+        const constraint = findConstraint(
+            (SKELETON.valueOf() as any).transformConstraints,
+            String(NAME),
+        );
+        if (!constraint) return '';
+        return JSON.stringify({
+            name: constraint.data?.name || NAME,
+            target: constraint.target?.data?.name || constraint.target?.name || '',
+            rotateMix: getConstraintField(constraint, 'rotateMix'),
+            translateMix: getConstraintField(constraint, 'translateMix'),
+            scaleMix: getConstraintField(constraint, 'scaleMix'),
+            shearMix: getConstraintField(constraint, 'shearMix'),
+        });
+    }
+
+    setPathConstraintField(args: {
+        SKELETON: SpineSkeletonReport<Skeleton>;
+        NAME: string;
+        FIELD: string;
+        VALUE: number;
+    }) {
+        const { SKELETON, NAME, FIELD, VALUE } = args;
+        if (!(SKELETON && SKELETON instanceof SpineSkeletonReport)) {
+            logger.error(translate('typeError'));
+            return;
+        }
+        const skeleton = SKELETON.valueOf() as any;
+        const constraint = findConstraint(skeleton.pathConstraints, String(NAME));
+        const value = Number(VALUE);
+        if (!(constraint && !isNaN(value) && setConstraintField(constraint, String(FIELD), value))) {
+            logger.error(translate('typeError'), `path constraint field invalid: ${NAME}.${FIELD}`);
+        }
+    }
+
+    getPathConstraintInfo(args: {
+        SKELETON: SpineSkeletonReport<Skeleton>;
+        NAME: string;
+    }) {
+        const { SKELETON, NAME } = args;
+        if (!(SKELETON && SKELETON instanceof SpineSkeletonReport)) {
+            logger.error(translate('typeError'));
+            return '';
+        }
+        const constraint = findConstraint(
+            (SKELETON.valueOf() as any).pathConstraints,
+            String(NAME),
+        );
+        if (!constraint) return '';
+        return JSON.stringify({
+            name: constraint.data?.name || NAME,
+            target: constraint.target?.data?.name || constraint.target?.name || '',
+            position: getConstraintField(constraint, 'position'),
+            spacing: getConstraintField(constraint, 'spacing'),
+            rotateMix: getConstraintField(constraint, 'rotateMix'),
+            translateMix: getConstraintField(constraint, 'translateMix'),
+        });
+    }
+
     setSkeletonSkin(args: {
         SKELETON: SpineSkeletonReport<Skeleton>;
         NAME: string;
@@ -1416,6 +2453,93 @@ class SpineExtension extends SimpleExt {
         }
     }
 
+    combineSkeletonSkins(args: {
+        SKELETON: SpineSkeletonReport<Skeleton>;
+        NAMES: string;
+    }) {
+        const { SKELETON, NAMES } = args;
+        if (!(SKELETON && SKELETON instanceof SpineSkeletonReport)) {
+            logger.error(translate('typeError'));
+            return;
+        }
+        try {
+            const skeleton = SKELETON.valueOf() as any;
+            const names = String(NAMES)
+                .split(',')
+                .map((name) => name.trim())
+                .filter(Boolean);
+            if (!names.length) {
+                throw new Error('skin names are empty');
+            }
+            const skins = names.map((name) => {
+                const skin = skeleton.data.findSkin(name);
+                if (!skin) {
+                    throw new Error(`skin not found: ${name}`);
+                }
+                return skin;
+            });
+            const SkinCtor = skins[0].constructor;
+            const combinedSkin = new SkinCtor(`combined:${names.join('+')}`);
+            for (const skin of skins) {
+                combinedSkin.addSkin(skin);
+            }
+            skeleton.setSkin(combinedSkin);
+            skeleton.setSlotsToSetupPose?.();
+            skeleton.updateWorldTransform?.(2);
+        } catch (e) {
+            logger.error(translate('typeError'), e);
+        }
+    }
+
+    getSlotAttachment(args: {
+        SKELETON: SpineSkeletonReport<Skeleton>;
+        SLOT: string;
+    }) {
+        const { SKELETON, SLOT } = args;
+        if (!(SKELETON && SKELETON instanceof SpineSkeletonReport)) {
+            logger.error(translate('typeError'));
+            return '';
+        }
+        const skeleton = SKELETON.valueOf() as any;
+        const slot = skeleton.findSlot(String(SLOT));
+        if (!slot) {
+            logger.error(translate('typeError'), `slot not found: ${SLOT}`);
+            return '';
+        }
+        return getSlotAttachmentName(slot);
+    }
+
+    getSlotAttachments(args: {
+        SKELETON: SpineSkeletonReport<Skeleton>;
+        SLOT: string;
+        SKIN: string;
+    }) {
+        const { SKELETON, SLOT, SKIN } = args;
+        if (!(SKELETON && SKELETON instanceof SpineSkeletonReport)) {
+            logger.error(translate('typeError'));
+            return '';
+        }
+        try {
+            const skeleton = SKELETON.valueOf() as any;
+            const slotIndex = findSlotIndex(skeleton, String(SLOT));
+            if (slotIndex < 0) {
+                throw new Error(`slot not found: ${SLOT}`);
+            }
+            const skinName = String(SKIN || 'default');
+            const skin =
+                skinName === 'default'
+                    ? skeleton.data.defaultSkin || skeleton.skin
+                    : skeleton.data.findSkin(skinName);
+            if (!skin) {
+                throw new Error(`skin not found: ${SKIN}`);
+            }
+            return JSON.stringify(getSkinAttachmentNames(skin, slotIndex));
+        } catch (e) {
+            logger.error(translate('typeError'), e);
+            return '';
+        }
+    }
+
     setSlotAttachment(args: {
         SKELETON: SpineSkeletonReport<Skeleton>;
         SLOT: string;
@@ -1428,6 +2552,10 @@ class SpineExtension extends SimpleExt {
         }
         try {
             const skeleton = SKELETON.valueOf() as any;
+            const slot = skeleton.findSlot(String(SLOT));
+            if (!slot) {
+                throw new Error(`slot not found: ${SLOT}`);
+            }
             skeleton.setAttachment(String(SLOT), String(ATTACHMENT));
             skeleton.updateWorldTransform?.(2);
         } catch (e) {
@@ -1455,6 +2583,78 @@ class SpineExtension extends SimpleExt {
         } catch (e) {
             logger.error(translate('typeError'), e);
         }
+    }
+
+    getBoundingBoxes(args: { SKELETON: SpineSkeletonReport<Skeleton> }) {
+        if (!(args.SKELETON && args.SKELETON instanceof SpineSkeletonReport)) {
+            logger.error(translate('typeError'));
+            return '';
+        }
+        const skeleton = args.SKELETON.valueOf() as any;
+        return JSON.stringify(
+            collectBoundingBoxes(skeleton).map((box) => ({
+                name: box.name,
+                slot: box.slot?.data?.name || '',
+            })),
+        );
+    }
+
+    getBoundingBoxVertices(args: {
+        SKELETON: SpineSkeletonReport<Skeleton>;
+        NAME: string;
+    }) {
+        if (!(args.SKELETON && args.SKELETON instanceof SpineSkeletonReport)) {
+            logger.error(translate('typeError'));
+            return '';
+        }
+        const points = computeBoundingBoxVertices(args.SKELETON.valueOf() as any, String(args.NAME));
+        return points ? JSON.stringify(points) : '';
+    }
+
+    getBoundingBoxAabb(args: {
+        SKELETON: SpineSkeletonReport<Skeleton>;
+        NAME: string;
+    }) {
+        if (!(args.SKELETON && args.SKELETON instanceof SpineSkeletonReport)) {
+            logger.error(translate('typeError'));
+            return '';
+        }
+        const points = computeBoundingBoxVertices(args.SKELETON.valueOf() as any, String(args.NAME));
+        return points ? JSON.stringify(getAabb(points)) : '';
+    }
+
+    isPointInBoundingBox(args: {
+        POS: string;
+        SKELETON: SpineSkeletonReport<Skeleton>;
+        NAME: string;
+    }) {
+        if (!(args.SKELETON && args.SKELETON instanceof SpineSkeletonReport)) {
+            logger.error(translate('typeError'));
+            return false;
+        }
+        try {
+            const point = parsePair(args.POS, 'pos');
+            const points = computeBoundingBoxVertices(args.SKELETON.valueOf() as any, String(args.NAME));
+            return !!points && pointInPolygon(point, points);
+        } catch (e) {
+            logger.error(translate('typeError'), e);
+            return false;
+        }
+    }
+
+    areBoundingBoxesIntersecting(args: {
+        A: SpineSkeletonReport<Skeleton>;
+        BOX_A: string;
+        B: SpineSkeletonReport<Skeleton>;
+        BOX_B: string;
+    }) {
+        if (!(args.A instanceof SpineSkeletonReport && args.B instanceof SpineSkeletonReport)) {
+            logger.error(translate('typeError'));
+            return false;
+        }
+        const a = computeBoundingBoxVertices(args.A.valueOf() as any, String(args.BOX_A));
+        const b = computeBoundingBoxVertices(args.B.valueOf() as any, String(args.BOX_B));
+        return !!(a && b && polygonsIntersect(a, b));
     }
 
     switchDebug() {
@@ -1488,9 +2688,14 @@ class SpineExtension extends SimpleExt {
                 return;
             }
             if (ACTION == 'add') {
-                animationState.addAnimation(TRACK, NAME, !!LOOP, Number(DELAY) || 0);
+                animationState.addAnimation(
+                    TRACK,
+                    NAME,
+                    toBoolean(LOOP),
+                    Number(DELAY) || 0,
+                );
             } else {
-                animationState.setAnimation(TRACK, NAME, !!LOOP);
+                animationState.setAnimation(TRACK, NAME, toBoolean(LOOP));
             }
         } catch (e) {
             return String(e);
@@ -1574,7 +2779,7 @@ class SpineExtension extends SimpleExt {
         try {
             const state = STATE.valueOf() as any;
             const track = Number(TRACK);
-            if (isNaN(track)) {
+            if (isNaN(track) || track < 0) {
                 throw new Error('track is invalid');
             }
             state.clearTrack(track);
@@ -1590,6 +2795,284 @@ class SpineExtension extends SimpleExt {
         } catch (e) {
             logger.error(translate('typeError'), e);
         }
+    }
+
+    setTrackTime(args: {
+        STATE: SpineAnimationStateReport<AnimationState>;
+        TRACK: number;
+        TIME: number;
+    }) {
+        const { STATE, TRACK, TIME } = args;
+        try {
+            const { track } = getStateAndTrack(STATE, TRACK);
+            const time = Number(TIME);
+            if (isNaN(time) || Number(TRACK) < 0) {
+                throw new Error('time is invalid');
+            }
+            track.trackTime = Math.max(0, time);
+        } catch (e) {
+            logger.error(translate('typeError'), e);
+        }
+    }
+
+    setTrackProgress(args: {
+        STATE: SpineAnimationStateReport<AnimationState>;
+        TRACK: number;
+        PROGRESS: number;
+    }) {
+        const { STATE, TRACK, PROGRESS } = args;
+        try {
+            const { track } = getStateAndTrack(STATE, TRACK);
+            const progress = Number(PROGRESS);
+            if (isNaN(progress) || Number(TRACK) < 0) {
+                throw new Error('progress is invalid');
+            }
+            track.trackTime =
+                getAnimationDuration(track) * Math.min(1, Math.max(0, progress));
+        } catch (e) {
+            logger.error(translate('typeError'), e);
+        }
+    }
+
+    listenAnimationEvents(args: {
+        STATE: SpineAnimationStateReport<AnimationState>;
+    }) {
+        try {
+            const state = args.STATE.valueOf() as any;
+            if (state.__spineProEventListener) {
+                return;
+            }
+            this.animationEvents.set(state, []);
+            const push = (type: string, entry: any, event?: any) => {
+                const events = this.animationEvents.get(state) || [];
+                events.push({
+                    type,
+                    track: entry?.trackIndex ?? -1,
+                    animation: entry?.animation?.name || '',
+                    name: event?.data?.name || event?.name || type,
+                    intValue: event?.intValue,
+                    floatValue: event?.floatValue,
+                    stringValue: event?.stringValue,
+                });
+                if (events.length > 50) {
+                    events.shift();
+                }
+                this.animationEvents.set(state, events);
+            };
+            state.__spineProEventListener = {
+                start: (entry: any) => push('start', entry),
+                interrupt: (entry: any) => push('interrupt', entry),
+                end: (entry: any) => push('end', entry),
+                dispose: (entry: any) => push('dispose', entry),
+                complete: (entry: any) => {
+                    push('complete', entry);
+                    this.handleStateMachineComplete(state, entry?.trackIndex ?? -1);
+                },
+                event: (entry: any, event: any) => push('event', entry, event),
+            };
+            state.addListener(state.__spineProEventListener);
+        } catch (e) {
+            logger.error(translate('typeError'), e);
+        }
+    }
+
+    popAnimationEvent(args: { STATE: SpineAnimationStateReport<AnimationState> }) {
+        try {
+            const state = args.STATE.valueOf() as any;
+            const events = this.animationEvents.get(state) || [];
+            const event = events.shift() || null;
+            this.animationEvents.set(state, events);
+            return JSON.stringify(event);
+        } catch (e) {
+            logger.error(translate('typeError'), e);
+            return '';
+        }
+    }
+
+    popFilteredAnimationEvent(args: {
+        STATE: SpineAnimationStateReport<AnimationState>;
+        TRACK: number;
+        ANIMATION: string;
+        TYPE: string;
+    }) {
+        try {
+            const state = args.STATE.valueOf() as any;
+            const events = this.animationEvents.get(state) || [];
+            const track = Number(args.TRACK);
+            const animation = String(args.ANIMATION || '');
+            const type = String(args.TYPE || '');
+            const index = events.findIndex(
+                (event) =>
+                    (isNaN(track) || track < 0 || event.track === track) &&
+                    (!animation || event.animation === animation) &&
+                    (!type || event.type === type || event.name === type),
+            );
+            const event = index >= 0 ? events.splice(index, 1)[0] : null;
+            this.animationEvents.set(state, events);
+            return JSON.stringify(event);
+        } catch (e) {
+            logger.error(translate('typeError'), e);
+            return '';
+        }
+    }
+
+    getAnimationStateMonitor(args: {
+        STATE: SpineAnimationStateReport<AnimationState>;
+    }) {
+        try {
+            const state = args.STATE.valueOf() as any;
+            const tracks = (state.tracks || []).map((track: any, index: number) => {
+                if (!track) return null;
+                const duration = getAnimationDuration(track);
+                const time = getTrackAnimationTime(track);
+                return {
+                    track: index,
+                    animation: track.animation?.name || '',
+                    loop: !!track.loop,
+                    trackTime: time,
+                    duration,
+                    progress: duration ? time / duration : 0,
+                    timeScale: track.timeScale ?? 1,
+                };
+            });
+            return JSON.stringify({
+                timeScale: state.timeScale ?? 1,
+                tracks,
+                pendingEvents: (this.animationEvents.get(state) || []).length,
+            });
+        } catch (e) {
+            logger.error(translate('typeError'), e);
+            return '';
+        }
+    }
+
+    private getStateMachine(state: any): AnimationStateMachine {
+        let machine = this.stateMachines.get(state);
+        if (!machine) {
+            machine = {
+                currentState: '',
+                previousState: '',
+                states: {},
+                inputContext: {},
+            };
+            this.stateMachines.set(state, machine);
+        }
+        return machine;
+    }
+
+    private handleStateMachineComplete(state: any, trackIndex: number) {
+        const machine = this.stateMachines.get(state);
+        if (!machine?.currentState) return;
+        const current = machine.states[machine.currentState];
+        if (!(current && current.track === trackIndex && !current.loop)) return;
+        let next = '';
+        if (current.returnMode === 'fixed') {
+            next = current.returnState;
+        } else if (current.returnMode === 'input') {
+            next = machine.inputContext[current.returnState] || current.returnState;
+        }
+        if (next && machine.states[next]) {
+            this.switchAnimationStateByName(state, next, true);
+        }
+    }
+
+    private switchAnimationStateByName(state: any, name: string, force = false) {
+        const machine = this.getStateMachine(state);
+        const next = machine.states[name];
+        if (!next) {
+            throw new Error(`state not found: ${name}`);
+        }
+        const current = machine.states[machine.currentState];
+        if (!force && current) {
+            const allowed = current.allowInterruptBy.length
+                ? current.allowInterruptBy.includes(name)
+                : next.priority >= current.priority;
+            if (!allowed) return;
+        }
+        if (current) {
+            state.data?.setMix?.(current.animation, next.animation, Math.max(0, next.mix));
+        }
+        machine.previousState = machine.currentState;
+        machine.currentState = name;
+        this.listenAnimationEvents({ STATE: new SpineAnimationStateReport(state) });
+        state.setAnimation(next.track, next.animation, next.loop);
+    }
+
+    registerAnimationState(args: {
+        STATE: SpineAnimationStateReport<AnimationState>;
+        NAME: string;
+        ANIMATION: string;
+        TRACK: number;
+        LOOP: boolean;
+        PRIORITY: number;
+        MIX: number;
+    }) {
+        try {
+            const state = args.STATE.valueOf() as any;
+            const machine = this.getStateMachine(state);
+            machine.states[String(args.NAME)] = {
+                animation: String(args.ANIMATION),
+                track: Math.max(0, Number(args.TRACK) || 0),
+                loop: toBoolean(args.LOOP),
+                mix: Math.max(0, Number(args.MIX) || 0),
+                priority: Number(args.PRIORITY) || 0,
+                returnMode: 'none',
+                returnState: '',
+                allowInterruptBy: [],
+            };
+            this.listenAnimationEvents({ STATE: args.STATE });
+        } catch (e) {
+            logger.error(translate('typeError'), e);
+        }
+    }
+
+    setAnimationStateReturn(args: {
+        STATE: SpineAnimationStateReport<AnimationState>;
+        NAME: string;
+        MODE: 'none' | 'fixed' | 'input';
+        RETURN: string;
+    }) {
+        try {
+            const machine = this.getStateMachine(args.STATE.valueOf() as any);
+            const item = machine.states[String(args.NAME)];
+            if (!item) throw new Error(`state not found: ${args.NAME}`);
+            item.returnMode = args.MODE;
+            item.returnState = String(args.RETURN || '');
+        } catch (e) {
+            logger.error(translate('typeError'), e);
+        }
+    }
+
+    switchAnimationState(args: {
+        STATE: SpineAnimationStateReport<AnimationState>;
+        NAME: string;
+    }) {
+        try {
+            this.switchAnimationStateByName(args.STATE.valueOf() as any, String(args.NAME));
+        } catch (e) {
+            logger.error(translate('typeError'), e);
+        }
+    }
+
+    setAnimationStateInput(args: {
+        STATE: SpineAnimationStateReport<AnimationState>;
+        KEY: string;
+        VALUE: string;
+    }) {
+        const machine = this.getStateMachine(args.STATE.valueOf() as any);
+        machine.inputContext[String(args.KEY)] = String(args.VALUE);
+    }
+
+    getAnimationStateMachineInfo(args: {
+        STATE: SpineAnimationStateReport<AnimationState>;
+    }) {
+        const machine = this.getStateMachine(args.STATE.valueOf() as any);
+        return JSON.stringify({
+            currentState: machine.currentState,
+            previousState: machine.previousState,
+            states: Object.keys(machine.states),
+            inputContext: machine.inputContext,
+        });
     }
 
     animationCompleted(args: {

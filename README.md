@@ -62,6 +62,34 @@
 
 - 项目灵感，renderer部分的原版支持：HCN
 
+### 📌快速使用
+
+---
+
+1. 上传资源：选择同一套 Spine 导出的 `.skel` 或 `.json`、`.atlas`、所有 `.png`，版本优先按提示选择。
+2. 加载骨架：用“加载配置为[CONFIG]的spine骨骼并命名为[NAME]”得到 Spine Skin。
+3. 显示到角色：用“将角色[TARGET_NAME]的skin设为Skin[SKELETON]”。
+4. 本地 dataURL：用“选择本地Spine文件创建dataURL配置”生成配置，可直接传给加载积木。
+
+### 🎬常用示例
+
+---
+
+- 动画播放：获取 Skin 的 AnimationState，立即播放 idle / walk / attack，可设置 mix、delay、暂停、继续、停止 track。
+- 骨骼控制：获取骨架中的 bone，设置世界坐标、旋转、缩放，或让骨骼指向舞台坐标。
+- IK 控制：对已配置 IK 的资源，设置 IK target 的世界坐标。
+- 换装附件：切换 skin、组合多个 skin、设置/隐藏 slot attachment、查询可用 attachment。
+- 动画事件：先开始监听 AnimationState 事件，再取出缓存事件，支持 start、complete、end、interrupt、dispose 和 Spine Event 参数。
+
+### 🧯常见问题
+
+---
+
+- `SkeletonData is not defined`：通常来自旧 3.8 runtime 变量问题，当前已做局部修复；仍建议确认 runtime 版本和资源导出版本一致。
+- Skin id 变 `-1`：项目停止后扩展会清理 skin，这是当前设计行为；重新运行后需要重新加载骨架。
+- 类型错误：注意区分 Skin、Skeleton、AnimationState、Bone，先用“获取[...]的”拿到正确对象再传入对应积木。
+- 版本不匹配：3.8 / 4.0 / 4.2 的 Spine 文件要选择对应 runtime，否则可能加载或解析失败。
+
 ### 😏杂谈（Q&A）
 
 - **为什么要对高级数据结构专门patch?**
