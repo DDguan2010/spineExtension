@@ -382,6 +382,12 @@ class SpineExtension extends SimpleExt {
                 this.runtime.off(key, callback);
             }
         }
+        // 先回收所有 skin 私有纹理，再释放各版本共享的 atlas/sceneRenderer。
+        // 此时项目已停、无使用者，统一释放是安全的，不影响运行中的效果。
+        this.gc();
+        for (const version in this.managers) {
+            this.managers[version].dispose?.();
+        }
     }
 
     /**

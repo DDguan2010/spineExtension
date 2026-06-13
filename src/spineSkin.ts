@@ -35,6 +35,7 @@ export class SpineSkin extends Skin {
     tk: any;
     name: string;
     renderer: RenderWebGL;
+    _disposed: boolean;
 
     constructor(
         id: number,
@@ -54,6 +55,7 @@ export class SpineSkin extends Skin {
         this.tk = tk;
         this.animationState = animationState;
         this.name = name;
+        this._disposed = false;
 
         this._texture = this.gl.createTexture();
         this.size = [640, 360];
@@ -91,12 +93,20 @@ export class SpineSkin extends Skin {
             this.renderer._xRight - this.renderer._xLeft,
             this.renderer._yTop - this.renderer._yBottom,
         ]);
-        requestAnimationFrame(() => this.emit(Skin.Events.WasAltered)); //request next frame
+        requestAnimationFrame(() => {
+            if (this._disposed) return;
+            this.emit(Skin.Events.WasAltered);
+        }); //request next frame
     }
 
     dispose(): void {
+        this._disposed = true;
         super.dispose();
         this.render = () => {};
+        if (this._texture) {
+            this.gl.deleteTexture(this._texture);
+            this._texture = null;
+        }
         delete this.skeleton;
         delete this.tk;
         delete this.animationState;

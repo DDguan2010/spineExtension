@@ -104,7 +104,13 @@ export class SpineManager<V extends VersionNames = VersionNames> {
         atlasUrl: string,
         rawDataURIs?: Record<string, string>,
     ): Promise<{ skeleton: Skeleton<V>; animationState: AnimationState<V> }> {
-        this.assetManager.removeAll?.();
+        // 重新加载前必须释放旧 atlas 贴图，否则反复加载会线性吃显存。
+        // 部分 spine 版本的 AssetManager 没有 removeAll，需用 dispose 兜底确保 GL 纹理被删除。
+        if (typeof (this.assetManager as any).removeAll === 'function') {
+            this.assetManager.removeAll();
+        } else if (typeof (this.assetManager as any).dispose === 'function') {
+            (this.assetManager as any).dispose();
+        }
         loadAsset(this.assetManager, skeletonUrl, atlasUrl, rawDataURIs);
         await loadAll(this.assetManager);
         return parseSkeleton(
@@ -133,6 +139,19 @@ export class SpineManager<V extends VersionNames = VersionNames> {
         }
         this.sceneRenderer.end();
         this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA); //reset blendfunc
+    }
+    /**
+     * 释放共享资源（atlas 贴图与 sceneRenderer 的 buffer/shader）。
+     * 仅可在扩展卸载/整体销毁等"无任何使用者"的时机调用，
+     * 不能在单个 skin 销毁时调用，否则会误删同版本其他角色仍在用的 atlas。
+     */
+    dispose() {
+        if (typeof (this.assetManager as any).dispose === 'function') {
+            (this.assetManager as any).dispose();
+        } else if (typeof (this.assetManager as any).removeAll === 'function') {
+            this.assetManager.removeAll();
+        }
+        (this.sceneRenderer as any)?.dispose?.();
     }
 }
 
