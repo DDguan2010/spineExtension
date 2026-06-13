@@ -16,7 +16,11 @@ export function getTranslate(): TranslateFn {
     if (!Scratch.runtime) {
         throw new Error('get translate调用太晚');
     }
-    const fmt = Scratch.runtime.getFormatMessage({ 'zh-cn': zh_cn, en });
+    const getFmt = (Scratch.runtime as any).getFormatMessage;
+    const fmt =
+        typeof getFmt === 'function'
+            ? getFmt.call(Scratch.runtime, { 'zh-cn': zh_cn, en })
+            : (msg: { default?: string }) => (msg && msg.default) || '';
     translateFn = function (id: Id, args?: object) {
         return fmt(
             {

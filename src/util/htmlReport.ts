@@ -79,7 +79,7 @@ export function patch(runtime: GandiRuntime) {
         if (value instanceof HTMLReport) {
             const Runtime = this.constructor;
             this.emit(Runtime.VISUAL_REPORT, { id, value }); //不进行tostring
-        } else {
+        } else if (typeof originReport === 'function') {
             originReport.call(this, id, value); //原版会调用toString
         }
     };
@@ -92,6 +92,9 @@ export function patch(runtime: GandiRuntime) {
         monitor: Map<'id' | 'value', string | HTMLReport>,
     ) {
         const value = monitor.get('value');
+        if (typeof originUpdate !== 'function') {
+            return;
+        }
         if (value instanceof HTMLReport) {
             originUpdate.call(this, monitor.set('value', value.toString()));
         } else {

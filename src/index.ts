@@ -1655,9 +1655,22 @@ class SpineExtension extends SimpleExt {
         await Promise.all(uploadPromises);
     }
 
+    private async getUserIdSafe(): Promise<string> {
+        try {
+            const api = (this.runtime as any).ccwAPI;
+            if (api && typeof api.getUserInfo === 'function') {
+                const info = await api.getUserInfo();
+                if (info && info.userId) return info.userId;
+            }
+        } catch (e) {
+            logger.warn('ccwAPI 不可用，部分云功能将降级:', e);
+        }
+        return 'local';
+    }
+
     async startUpload() {
         try {
-            const { userId } = await this.runtime.ccwAPI.getUserInfo();
+            const userId = await this.getUserIdSafe();
             const userAssetUrl = `spine/${userId}/`;
 
             const spineFolder = prompt(
@@ -1793,7 +1806,7 @@ class SpineExtension extends SimpleExt {
         }
         this.fetchingConfig = true;
         this.runtime.emit('TOOLBOX_EXTENSIONS_NEED_UPDATE');
-        const { userId } = await this.runtime.ccwAPI.getUserInfo();
+        const userId = await this.getUserIdSafe();
         this.cloudConfig = await this.storage.fetchConfig(userId);
         this.fetchingConfig = false;
         this.runtime.emit('TOOLBOX_EXTENSIONS_NEED_UPDATE');
@@ -1825,7 +1838,7 @@ class SpineExtension extends SimpleExt {
         const name = String(args.NAME || '').trim();
         if (!name) return;
         if (!confirm(translate('deleteSpineConfig.confirm', { name }))) return;
-        const { userId } = await this.runtime.ccwAPI.getUserInfo();
+        const userId = await this.getUserIdSafe();
         await this.storage.deleteConfig(userId, name);
         await this.refreshMenu();
     }
@@ -1840,7 +1853,7 @@ class SpineExtension extends SimpleExt {
         ) {
             return;
         }
-        const { userId } = await this.runtime.ccwAPI.getUserInfo();
+        const userId = await this.getUserIdSafe();
         await this.storage.renameConfig(userId, oldName, newName);
         await this.refreshMenu();
     }
@@ -1853,7 +1866,7 @@ class SpineExtension extends SimpleExt {
     }) {
         const name = String(args.NAME || '').trim();
         if (!name) return;
-        const { userId } = await this.runtime.ccwAPI.getUserInfo();
+        const userId = await this.getUserIdSafe();
         await this.storage.saveConfig(userId, name, {
             skel: String(args.SKEL_URL),
             atlas: String(args.ATLAS_URL),

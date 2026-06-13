@@ -3,12 +3,29 @@ import type { SpineManager } from './spineManager';
 import type { GandiRuntime } from '../types/gandi-type';
 import spineVersions, { AnimationState, Skeleton } from './spine/spineVersions';
 
-const Skin = Scratch.runtime.renderer.exports.Skin;
+type RendererSkin = typeof Scratch.runtime.renderer.exports.Skin;
+
+let Skin: any;
+
+function getSkin() {
+    if (!Skin) {
+        Skin = (Scratch as any).vm.runtime.renderer.exports.Skin;
+        Object.setPrototypeOf(SkinProxy.prototype, Skin.prototype);
+    }
+    return Skin;
+}
+
+const SkinProxy: any = class {
+    constructor(id: number) {
+        return Reflect.construct(getSkin(), [id], new.target);
+    }
+};
 
 /**
  * 重写hasInstance,使scratch renderer在渲染阶段使用spineSkin.render()
  */
 export function patchSpineSkin(runtime: GandiRuntime) {
+    getSkin();
     const [id, skin] = runtime.renderer.createSpineSkin();
     runtime.renderer._allSkins[id] = undefined;
     runtime.renderer._nextSkinId--;
@@ -25,7 +42,7 @@ export function patchSpineSkin(runtime: GandiRuntime) {
     });
 }
 
-export class SpineSkin extends Skin {
+export class SpineSkin extends (SkinProxy as RendererSkin) {
     gl: AnyWebGLContext;
     manager: SpineManager;
     _size: [x: number, y: number];
@@ -95,7 +112,7 @@ export class SpineSkin extends Skin {
         ]);
         requestAnimationFrame(() => {
             if (this._disposed) return;
-            this.emit(Skin.Events.WasAltered);
+            this.emit(getSkin().Events.WasAltered);
         }); //request next frame
     }
 
